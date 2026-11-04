@@ -46,7 +46,9 @@ jobs:
           cargo fmt --check
           cargo clippy --locked --all-targets -- -D warnings
       - name: Tests (simulated devices only)
-        run: cargo test --locked
+        # One test at a time: every test drives simulated serial ports with real timing (150 ms
+        # reply budget), and parallel tests starve each other on 4-core runners.
+        run: cargo test --locked -- --test-threads=1
       - name: Release build
         run: cargo build --release --locked
       - name: npm packages
