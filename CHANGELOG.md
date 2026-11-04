@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Versions follow
 
 ## Unreleased
 
+## 0.7.0-rc.1 - 2026-11-04
+
 The host is rebuilt for the USB-C Voloo Switch (PC → USB → Switch, no Core).
 
 ### Breaking changes
