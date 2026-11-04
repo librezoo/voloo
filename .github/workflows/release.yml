@@ -1,0 +1,50 @@
+name: Release
+# Push a tag vX.Y.Z (equal to the version in Cargo.toml) to build every platform and,
+# after approval of the `release` environment, publish to npm and a GitHub release.
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    uses: ./.github/workflows/ci.yml
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment: release # add required reviewers to this environment for a manual gate
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          path: dist
+          merge-multiple: true
+      - name: Check tag, version and files
+        run: |
+          version=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          ls -l dist/npm dist/pypi
+          test "$(ls dist/npm/librezoo-voloo-*.tgz | wc -l)" = 5
+      - name: Publish platform packages, then the main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          tag=latest; case "$VERSION" in *-*) tag=next;; esac
+          for f in dist/npm/librezoo-voloo-*.tgz; do npm publish "$f" --access public --tag "$tag"; done
+          npm publish "dist/npm/voloo-$VERSION.tgz" --access public --tag "$tag"
+      - name: GitHub release with all packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flag=; case "$VERSION" in *-*) flag=--prerelease;; esac
+          gh release create "$GITHUB_REF_NAME" $flag --generate-notes dist/npm/*.tgz dist/pypi/*.whl

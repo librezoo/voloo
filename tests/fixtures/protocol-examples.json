@@ -1,0 +1,357 @@
+{
+  "description": "voloo_switch 主站开发帧示例。所有 hex 字符串均为完整线缆 ADU，已含 CRC 低字节、高字节。null 表示此步骤无响应。每个 example 使用独立节点实例；同一 example 的 actions 顺序执行。",
+  "protocol_version": "2.5",
+  "firmware_release": "v2.7.0",
+  "uid": "01-23-45-67-89-AB-CD-EF",
+  "notes": [
+    "这是 UID 扩展 RTU 协议，unit_id 恒为 0xF7；不能直接交给仅支持标准 Modbus RTU 帧格式的解析器。",
+    "寄存器、session 和 nonce 均大端；UID 是按所列顺序发送的 8 字节序列；CRC 两字节小端。",
+    "快照为人为构造的协议示例，不是实测电压、精度报告或标定参数。",
+    "控制 hook 在测试中只记录被接受的命令；不模拟功率状态机，也不访问串口或输出引脚。",
+    "昵称成功示例假设固件允许写入并持久化成功；控制 echo 不代表 ON、OFF 或放电已经完成。",
+    "生产使用必须按实际 UID 替换这 8 字节并重新计算 CRC；不要将示例直接发送给未确认的设备。"
+  ],
+  "fixture": {
+    "uptime_s": 66051,
+    "valid_request_count_before_first_action": 66050,
+    "crc_error_count": 2,
+    "uart_error_count": 3,
+    "exception_response_count": 4,
+    "reset_reason": 1,
+    "measurement_seq": 74565,
+    "sample_count": 16,
+    "calibration_code": 512,
+    "vin_mv": 5000,
+    "vin_raw_sum": 1023,
+    "vin_valid": true,
+    "vout_valid": true,
+    "on": {
+      "power_state": 1,
+      "status_flags": 25,
+      "vout_mv": 5000,
+      "vout_raw_sum": 1023,
+      "last_command": 1,
+      "last_result": 2
+    },
+    "off": {
+      "power_state": 0,
+      "status_flags": 24,
+      "vout_mv": 0,
+      "vout_raw_sum": 0,
+      "last_command": 0,
+      "last_result": 2
+    }
+  },
+  "examples": [
+    {
+      "id": "read_status",
+      "description": "读取完整状态块：ON，VIN/VOUT 均有效且为 5000 mV，最近 ON 命令已成功。",
+      "initial_power": "on",
+      "actions": [
+        {
+          "name": "read_status",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 04 01 23 45 67 89 AB CD EF 00 00 00 06 01 0B",
+          "response_hex": "F7 04 01 23 45 67 89 AB CD EF 0C 00 01 00 19 13 88 13 88 00 01 00 02 65 30",
+          "register_values": [
+            1,
+            25,
+            5000,
+            5000,
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "id": "read_control",
+      "description": "FC03 读取最近接受的控制命令；其值不是实际 POWER_STATE。",
+      "initial_power": "on",
+      "actions": [
+        {
+          "name": "read_control",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 03 01 23 45 67 89 AB CD EF 00 00 00 01 4B 8E",
+          "response_hex": "F7 03 01 23 45 67 89 AB CD EF 02 00 01 88 8A",
+          "register_values": [
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "command_on",
+      "description": "开启输出：正常回包逐字节 echo 请求，只表示命令已接收。实际完成必须继续轮询状态。",
+      "initial_power": "off",
+      "actions": [
+        {
+          "name": "command_on",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 06 01 23 45 67 89 AB CD EF 00 00 00 01 47 8B",
+          "response_hex": "F7 06 01 23 45 67 89 AB CD EF 00 00 00 01 47 8B",
+          "expect": {
+            "control_calls": 1,
+            "scheduled_command": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "command_off",
+      "description": "关闭输出：正常回包逐字节 echo 请求，只表示命令已接收。实际完成必须继续轮询状态。",
+      "initial_power": "on",
+      "actions": [
+        {
+          "name": "command_off",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 06 01 23 45 67 89 AB CD EF 00 00 00 00 86 4B",
+          "response_hex": "F7 06 01 23 45 67 89 AB CD EF 00 00 00 00 86 4B",
+          "expect": {
+            "control_calls": 1,
+            "scheduled_command": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "command_discharge",
+      "description": "关闭输出并主动放电：正常回包逐字节 echo 请求，只表示命令已接收。实际完成必须继续轮询状态。",
+      "initial_power": "on",
+      "actions": [
+        {
+          "name": "command_discharge",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 06 01 23 45 67 89 AB CD EF 00 00 00 02 07 8A",
+          "response_hex": "F7 06 01 23 45 67 89 AB CD EF 00 00 00 02 07 8A",
+          "expect": {
+            "control_calls": 1,
+            "scheduled_command": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "set_nickname",
+      "description": "输出关闭且固件允许昵称写入时，将昵称设为 UTF-8 PWR-01；24 字节区域剩余位置补零。",
+      "initial_power": "off",
+      "actions": [
+        {
+          "name": "set_nickname",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 10 01 23 45 67 89 AB CD EF 01 10 00 0D 1A 00 06 50 57 52 2D 30 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 89 5F",
+          "response_hex": "F7 10 01 23 45 67 89 AB CD EF 01 10 00 0D 70 E1",
+          "expect": {
+            "nickname_commits": 1,
+            "nickname_hex": "5057522D3031"
+          }
+        },
+        {
+          "name": "read_nickname_after_write",
+          "operation": "request",
+          "at_us": 120000,
+          "request_hex": "F7 04 01 23 45 67 89 AB CD EF 01 10 00 0D 40 F5",
+          "response_hex": "F7 04 01 23 45 67 89 AB CD EF 1A 00 06 50 57 52 2D 30 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 A6 42",
+          "expect": {
+            "nickname_commits": 1,
+            "nickname_hex": "5057522D3031"
+          }
+        }
+      ]
+    },
+    {
+      "id": "clear_nickname",
+      "description": "将已有昵称 PWR-01 清空：长度和完整 24 字节区域全部写零。",
+      "initial_power": "off",
+      "actions": [
+        {
+          "name": "clear_nickname",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 10 01 23 45 67 89 AB CD EF 01 10 00 0D 1A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 2D 30",
+          "response_hex": "F7 10 01 23 45 67 89 AB CD EF 01 10 00 0D 70 E1",
+          "expect": {
+            "nickname_commits": 1,
+            "nickname_hex": ""
+          }
+        }
+      ],
+      "initial_nickname": "PWR-01"
+    },
+    {
+      "id": "read_identity",
+      "description": "读取协议2.5、固件2.7、硬件1.0、UID和capabilities 0x03FF。",
+      "initial_power": "on",
+      "actions": [
+        {
+          "name": "read_identity",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 04 01 23 45 67 89 AB CD EF 01 00 00 09 40 F3",
+          "response_hex": "F7 04 01 23 45 67 89 AB CD EF 12 02 05 00 01 02 07 01 00 01 23 45 67 89 AB CD EF 03 FF 08 E8",
+          "register_values": [
+            517,
+            1,
+            519,
+            256,
+            291,
+            17767,
+            35243,
+            52719,
+            1023
+          ]
+        }
+      ]
+    },
+    {
+      "id": "read_runtime_diagnostics",
+      "description": "读取运行诊断块。32 位值高字在前；valid_request_count 已包含当前请求。",
+      "initial_power": "on",
+      "actions": [
+        {
+          "name": "read_runtime_diagnostics",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 04 01 23 45 67 89 AB CD EF 02 00 00 08 81 77",
+          "response_hex": "F7 04 01 23 45 67 89 AB CD EF 10 00 01 02 03 00 01 02 03 00 02 00 03 00 04 00 01 7D 9F",
+          "register_values": [
+            1,
+            515,
+            1,
+            515,
+            2,
+            3,
+            4,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "read_adc_diagnostics",
+      "description": "一次 FC04 读取 13 个寄存器的同组 ADC 发布快照；样本数 16，测量序号 0x00012345，CAL=512。此构造快照不是实测或标定记录。",
+      "initial_power": "on",
+      "actions": [
+        {
+          "name": "read_adc_diagnostics",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 04 01 23 45 67 89 AB CD EF 03 00 00 0D 40 88",
+          "response_hex": "F7 04 01 23 45 67 89 AB CD EF 1A 00 01 00 01 23 45 00 10 03 FF 03 FF 02 00 00 01 00 19 13 88 13 88 00 01 02 03 70 82",
+          "register_values": [
+            1,
+            1,
+            9029,
+            16,
+            1023,
+            1023,
+            512,
+            1,
+            25,
+            5000,
+            5000,
+            1,
+            515
+          ]
+        }
+      ]
+    },
+    {
+      "id": "illegal_address",
+      "description": "读取不存在的输入寄存器 0x0006，响应功能码 0x84，异常码 0x02。",
+      "initial_power": "on",
+      "actions": [
+        {
+          "name": "illegal_address",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 04 01 23 45 67 89 AB CD EF 00 06 00 01 A0 C8",
+          "response_hex": "F7 84 01 23 45 67 89 AB CD EF 02 AB 15"
+        }
+      ]
+    },
+    {
+      "id": "discover_and_ack",
+      "description": "session 0x1234、nonce 0x89ABCDEF、8 槽发现。扫描先无即时回包；本 UID 在指定槽延迟应答。收完整轮窗口后定向 ACK 无响应，随后同 session 扫描被静默。at_us 为协议处理函数的测试时间，不是主站发送开始时刻。",
+      "initial_power": "on",
+      "actions": [
+        {
+          "name": "discover_scan",
+          "operation": "request",
+          "at_us": 100000,
+          "request_hex": "F7 41 12 34 89 AB CD EF 08 FA BF",
+          "response_hex": null,
+          "expect": {
+            "discovery_slot": 5,
+            "discovery_pending": true,
+            "discovery_muted": false
+          }
+        },
+        {
+          "name": "before_slot_deadline",
+          "operation": "deferred",
+          "at_us": 117499,
+          "response_hex": null,
+          "expect": {
+            "discovery_pending": true
+          }
+        },
+        {
+          "name": "at_slot_deadline",
+          "operation": "deferred",
+          "at_us": 117500,
+          "response_hex": "F7 41 12 34 05 01 23 45 67 89 AB CD EF 02 05 D5 AF",
+          "expect": {
+            "discovery_pending": false
+          }
+        },
+        {
+          "name": "discover_ack",
+          "operation": "request",
+          "at_us": 130000,
+          "request_hex": "F7 42 01 23 45 67 89 AB CD EF 12 34 BA 23",
+          "response_hex": null,
+          "expect": {
+            "discovery_muted": true,
+            "discovery_pending": false
+          }
+        },
+        {
+          "name": "same_session_scan_after_ack",
+          "operation": "request",
+          "at_us": 150000,
+          "request_hex": "F7 41 12 34 89 AB CD EF 08 FA BF",
+          "response_hex": null,
+          "expect": {
+            "discovery_muted": true,
+            "discovery_pending": false
+          }
+        },
+        {
+          "name": "muted_node_remains_silent",
+          "operation": "deferred",
+          "at_us": 178000,
+          "response_hex": null,
+          "expect": {
+            "discovery_muted": true,
+            "discovery_pending": false
+          }
+        }
+      ],
+      "discovery": {
+        "session": 4660,
+        "nonce": 2309737967,
+        "slot_count": 8,
+        "slot_index": 5,
+        "slot_duration_us": 3500,
+        "response_delay_from_processing_us": 17500
+      }
+    }
+  ]
+}

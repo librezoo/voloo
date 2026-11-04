@@ -1,0 +1,20 @@
+# Python wheel that ships the native `voloo` executable (no Python code).
+# Build (from this directory): uvx maturin==1.15.0 build --release --out ../../dist/pypi
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "voloo"
+description = "Control USB-C Voloo Switch devices: CLI, MCP server for AI agents, local HTTP API and web dashboard."
+requires-python = ">=3.8"
+readme = "../../README.md"
+license = { text = "Apache-2.0" }
+keywords = ["voloo", "librezoo", "power", "usb", "mcp"]
+classifiers = ["Programming Language :: Rust", "Environment :: Console", "License :: OSI Approved :: Apache Software License"]
+dynamic = ["version"]
+
+[tool.maturin]
+bindings = "bin"
+manifest-path = "../../Cargo.toml"
+strip = true
