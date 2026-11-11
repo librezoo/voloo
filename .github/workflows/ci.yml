@@ -39,7 +39,13 @@ jobs:
         run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
       - name: Linux serial-port prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
+        run: |
+          # The runner's package mirror is occasionally unreachable; retry for a few minutes.
+          for attempt in 1 2 3 4 5 6; do
+            if sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y -o Acquire::Retries=3 pkg-config libudev-dev; then exit 0; fi
+            echo "apt attempt $attempt failed; retrying in 60 s"; sleep 60
+          done
+          exit 1
       - name: Formatting and lints
         if: matrix.target == 'linux-x64'
         run: |
