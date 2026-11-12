@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Versions follow
 
 ## Unreleased
 
+## 0.7.0-rc.2 - 2026-11-12
+
 ### Fixed
 
 - Publish the main npm package as `@librezoo/voloo`: npm rejects the unscoped name
