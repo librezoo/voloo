@@ -66,6 +66,10 @@ and anything that needs attention.
 - **Lock:** a locked device refuses every change from every client — dashboard,
   terminal, AI agents and programs — until you unlock it. `voloo lock bench-a` /
   `voloo unlock bench-a` do the same from the terminal.
+- **Unknown result:** power controls stay disabled until **Check state** reads fresh
+  device state successfully. A lost browser connection never triggers an automatic retry.
+- **Language and appearance:** choose English, 简体中文 or 繁體中文, and system,
+  light or dark appearance in the header. Preferences are saved in this browser.
 
 ## 4. AI agents (MCP)
 

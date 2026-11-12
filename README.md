@@ -87,12 +87,16 @@ and updates live. Every switch asks for confirmation and shows the result the
 device confirmed; an unknown outcome is highlighted. `voloo ui --no-open` prints
 the link instead.
 
-The look is LibreZoo's: night ink with a dot grid, the brand colours tuned for a
-screen, and the LibreZoo mark as each device's power control — the dot hangs in the
-air when the output is off and is caught in the corner of the L when it is on; its
-colour says what is happening (olive-volt on, apricot discharging, sky busy, coral
-fault). Hold the mark (or a button in the detail sheet) for 0.6 s to switch; a short
-press only shows a hint. Light mode follows the system.
+The dashboard uses the promo page's paper background, deep-purple outlines,
+enclosure yellow and hard offset shadows. Hold a device's switch (or a button in
+its detail sheet) for 0.6 s to change power; a short press only shows a hint.
+Releasing early, losing focus or hiding the page cancels the hold. Unknown outcomes
+require **Check state**, a fresh device read, before another power action.
+
+English, Simplified Chinese and Traditional Chinese are available from the language
+menu (the first visit follows the browser language). The appearance menu offers
+system, light and dark modes. Both preferences are stored in this browser; the UI
+loads no external fonts or services.
 
 To try it without hardware: `voloo demo` starts a separate background process with
 simulated devices (its own home, USB scanning off) and opens the dashboard.

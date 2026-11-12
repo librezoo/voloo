@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Versions follow
 
 ## Unreleased
 
+### Added
+
+- A dashboard styled to match the Voloo promo page: paper, deep-purple outlines,
+  yellow controls and hard offset shadows, with system/light/dark appearance choices.
+- English, Simplified Chinese and Traditional Chinese UI, including fault suggestions,
+  browser-language detection and locally saved preferences.
+
 ### Fixed
 
 - Cancel power holds on focus loss, hidden pages, removed controls and state changes;

@@ -19,17 +19,19 @@ function dashboard() {
       contains: (name) => this.classes.has(name),
     };
   }
-  const document = Object.assign(new EventTarget(), { hidden: false, querySelector: () => null });
+  const document = Object.assign(new EventTarget(), { hidden: false, querySelector: () => null, documentElement: { lang: '', dataset: {} } });
   const window = new EventTarget();
   let events;
   const ctx = vm.createContext({
     document, window, Event, AbortController, performance, console, TextEncoder,
+    navigator: { language: 'en' },
     URL, CSS: { escape: (s) => s },
     setTimeout: (fn) => { timers.set(++nextTimer, fn); return nextTimer; },
     clearTimeout: (id) => timers.delete(id),
     EventSource: class extends EventTarget { constructor() { super(); events = this; } close() {} },
     requestAnimationFrame: () => {},
   });
+  vm.runInContext(readFileSync(new URL('../web/i18n.js', import.meta.url), 'utf8'), ctx);
   vm.runInContext(readFileSync(new URL('../web/app.js', import.meta.url), 'utf8'), ctx);
   vm.runInContext('render = () => {}; notify = () => {};', ctx);
   const run = (s) => vm.runInContext(s, ctx);
@@ -104,10 +106,11 @@ test('a lost write response becomes unknown, and only a successful fresh read cl
   assert.equal(d.run('state.pending.has("a")'), false);
   await d.run('checkState("a")');
   assert.equal(d.run('state.unknown.has("a")'), true);
-  d.run('api = async () => ({ status: { output_enabled: true, busy: false } });');
+  d.run('api = async (method, path) => { globalThis.readRequest = [method, path]; return { uid: "a", output_enabled: true, busy: false }; };');
   await d.run('checkState("a")');
   assert.equal(d.run('state.unknown.has("a")'), false);
   assert.equal(d.run('state.devices.get("a").status.output_enabled'), true);
+  assert.equal(d.run('readRequest.join(" ")'), 'GET /v1/devices/a');
 });
 
 test('rename uses the reply immediately and cannot send a name when output is on', async () => {
@@ -118,4 +121,31 @@ test('rename uses the reply immediately and cannot send a name when output is on
   d.run('device.status.output_enabled = true; api = async () => { throw new Error("must not send") };');
   await d.run('rename(device, "other")');
   assert.equal(d.run('device.nickname'), '工作台');
+});
+
+test('locales fall back safely, reorder template values, and preserve device names', () => {
+  const d = dashboard();
+  assert.equal(d.run('VolooI18n.matchLanguage("zh-TW")'), 'zh-Hant');
+  assert.equal(d.run('VolooI18n.matchLanguage("zh-HK")'), 'zh-Hant');
+  assert.equal(d.run('VolooI18n.matchLanguage("zh-CN")'), 'zh-Hans');
+  assert.equal(d.run('VolooI18n.matchLanguage("fr-FR")'), 'en');
+  d.run('VolooI18n.setLanguage("zh-Hans")');
+  assert.equal(d.run('tr`Couldn\'t ${"开启供电"} ${"我的板子"}`'), '无法为 我的板子 开启供电');
+  assert.equal(d.run('FAULT.DEV_DISCHARGE_TIMEOUT'), '泄放超时');
+  assert.equal(d.run('nameOf({ uid: "ab-cd", nickname: "Off" })'), 'Off');
+  d.run('VolooI18n.setLanguage("zh-Hant")');
+  assert.equal(d.run('FAULT.DEV_DISCHARGE_TIMEOUT'), '洩放逾時');
+  assert.equal(d.run('tr("Unknown diagnostic detail")'), 'Unknown diagnostic detail');
+});
+
+test('every shipped locale has the same interpolation fields as its source', () => {
+  const d = dashboard();
+  const messages = d.run('VolooI18n.messages');
+  const fields = (s) => [...s.matchAll(/\{\d+\}/g)].map((m) => m[0]).sort();
+  for (const [source, locales] of Object.entries(messages)) {
+    for (const text of locales) {
+      assert.ok(text.length > 0, source);
+      assert.deepEqual(fields(text), fields(source), source);
+    }
+  }
 });

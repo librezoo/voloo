@@ -636,6 +636,17 @@ fn web_login_cookie_and_page() {
             .contains("script-src 'self'")
     );
     assert!(page.contains("<title>Voloo</title>"));
+    let (status, locale) = raw_request(
+        port,
+        &format!("GET /ui/i18n.js HTTP/1.1\r\n{host}Connection: close\r\n\r\n"),
+    );
+    assert_eq!(status, 200);
+    assert!(
+        header(&locale, "content-type")
+            .unwrap()
+            .contains("javascript")
+    );
+    assert!(locale.contains("zh-Hans") && locale.contains("zh-Hant"));
     assert_eq!(
         raw_request(
             port,

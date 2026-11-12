@@ -255,6 +255,7 @@ fn router(app: App) -> Router {
         .route("/ui/login", get(ui_login))
         .route("/ui/", get(ui_index))
         .route("/ui/app.js", get(ui_js))
+        .route("/ui/i18n.js", get(ui_i18n))
         .route("/ui/app.css", get(ui_css))
         .layer(middleware::from_fn_with_state(app.clone(), guard))
         .with_state(app)
@@ -716,6 +717,7 @@ async fn ui_login(State(app): State<App>, Query(q): Query<LoginQuery>) -> Respon
 
 const UI_HTML: &str = include_str!("../web/index.html");
 const UI_JS: &str = include_str!("../web/app.js");
+const UI_I18N: &str = include_str!("../web/i18n.js");
 const UI_CSS: &str = include_str!("../web/app.css");
 fn asset(body: &'static str, kind: &'static str) -> Response {
     (
@@ -738,6 +740,9 @@ async fn ui_index() -> Response {
 }
 async fn ui_js() -> Response {
     asset(UI_JS, "text/javascript; charset=utf-8")
+}
+async fn ui_i18n() -> Response {
+    asset(UI_I18N, "text/javascript; charset=utf-8")
 }
 async fn ui_css() -> Response {
     asset(UI_CSS, "text/css; charset=utf-8")
