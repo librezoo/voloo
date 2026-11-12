@@ -1,6 +1,6 @@
 # USB firmware updates and A/B rollback
 
-Version 0.7.0-rc.3 supports automatic encrypted USB updates for factory-initialized
+Version 0.7.0-rc.4 supports automatic encrypted USB updates for factory-initialized
 CH32X035 USB boards running secure firmware 3.0. The firmware source and factory
 keys are private. npm contains the host program, not plaintext firmware or keys.
 
@@ -146,6 +146,10 @@ across a reset. Results and failures are fsynced into the existing journal.
 Host tests cover simulated device/PTY maintenance, concurrent-job refusal, other
 devices remaining available, lost acknowledgements without modifying retries,
 failed transfer cleanup, failed-trial rollback and valid-measurement settling.
+Verification retries transient read-only failures for up to two seconds; persistent
+loss still refuses confirmation and rolls back. Modifying requests are never
+repeated. Deterministic tests exercise both one lost trial-status reply and
+persistent loss.
 Encrypted download tests cover success/failure cleanup, truncation, read errors,
 oversized/plaintext downloads, and pairing with the CLI version. UI tests cover
 protection initialization and OFF/lock/voltage requirements.
