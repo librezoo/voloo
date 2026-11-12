@@ -157,8 +157,9 @@ rollback and preservation of unrelated protection options.
 One real USB board (`CD-AB-75-F3-69-BE-AB-5D`) has exercised encrypted 3.0 uploads,
 explicit rollback, bad-ticket/bad-chunk refusal and an authenticated but
 non-booting candidate returning to the confirmed image through the watchdog.
-These tests ran with debug/read protection still disabled; enabling the
-protection options and online release downloading are separate remaining checks.
+After explicit approval, read/boot/key protection was enabled and read back as
+flags 14; encrypted updating and explicit rollback passed again with protection
+active. Online release downloading is a separate remaining check.
 Earlier plaintext A/B tests also covered 2.8 migration and the real dashboard.
 
 Evidence is kept outside the repository in workspace `output/` directories;
