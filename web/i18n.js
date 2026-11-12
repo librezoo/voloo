@@ -2,6 +2,9 @@
 'use strict';
 (() => {
 const messages = {
+  "Downloading encrypted firmware": ["正在下载加密固件", "正在下載加密韌體"],
+  "Compatible encrypted firmware is downloaded temporarily, verified on the device, then removed.": ["自动临时下载适配的加密固件，在设备上验证后删除下载文件。", "自動暫存下載適用的加密韌體，在裝置上驗證後刪除下載檔案。"],
+  "Online updates require trusted factory initialization and device protection.": ["在线升级需要先完成可信工厂初始化和设备保护。", "線上更新需要先完成可信工廠初始化和裝置保護。"],
   "Checking firmware": ["正在检查固件", "正在檢查韌體"],
   "Entering update mode": ["正在进入升级模式", "正在進入更新模式"],
   "Installing A/B support": ["正在安装 A/B 支持", "正在安裝 A/B 支援"],

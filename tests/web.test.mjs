@@ -189,3 +189,21 @@ test('structured firmware journal errors retain the recovery outcome and readabl
   assert.equal(d.run('normalizeOp(record).error.details.update.outcome'), 'rolled_back');
   assert.equal(d.run('normalizeOp({uid:"a",error:"old string error",outcome:"unknown"}).error.message'), 'old string error');
 });
+
+
+test('online firmware requires protected initialization and sends no local file bytes', async () => {
+  const d = dashboard();
+  d.run('state.live = true; globalThis.fwDevice = { uid: "a", online: true, identity: { capabilities: 0x1000 }, status: { state_code: 0, power_state: "OFF", output_enabled: false, discharge_enabled: false, busy: false, vin_valid: true, vout_valid: true, vout_mv: 0 } }; state.devices.set("a", fwDevice); globalThis.calls = []; act = async (...args) => { calls.push(args); }; refreshFirmware = () => {};');
+  for (const flags of [null, 0, 2, 6, 12]) {
+    d.ctx.flags = flags;
+    d.run('state.firmwareBoot.set("a", flags == null ? null : {encrypted: true, protection_flags: flags})');
+    await d.run('updateFirmware(fwDevice)');
+    assert.equal(d.run('calls.length'), 0);
+  }
+  d.run('state.firmwareBoot.set("a", {encrypted: true, protection_flags: 14})');
+  await d.run('updateFirmware(fwDevice)');
+  assert.equal(d.run('calls.length'), 1);
+  assert.equal(d.run('JSON.stringify(calls[0].slice(1))'), '["firmware_update","POST","/v1/devices/a/firmware",{}]');
+  d.run('VolooI18n.setLanguage("zh-Hans")');
+  assert.equal(d.run('firmwareStage("downloading")'), '正在下载加密固件');
+});

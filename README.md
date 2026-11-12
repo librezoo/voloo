@@ -50,7 +50,7 @@ always need it.
 | `voloo status [DEV]` / `info` / `diag --kind communication\|adc\|fast` | Read-only |
 | `voloo on DEV` / `off DEV` / `discharge DEV` | Switch and confirm by status |
 | `voloo cycle DEV [--off-ms 1000] [--no-discharge]` | Discharge (or OFF), wait, ON; stops at the first failure |
-| `voloo firmware status DEV` / `firmware update DEV FILE` / `firmware rollback DEV` | Managed USB firmware maintenance and A/B rollback; [details and first-install limits](docs/firmware-updates.md) |
+| `voloo firmware status DEV` / `firmware update DEV [FILE]` / `firmware rollback DEV` | Managed USB firmware maintenance and A/B rollback; [details and first-install limits](docs/firmware-updates.md) |
 | `voloo name DEV NICKNAME` | Persistent nickname (≤ 24 UTF-8 bytes); output must be fully OFF |
 | `voloo faults [DEV] [--all]` | Faults with the suggested next step |
 | `voloo log --kind operations\|faults\|trace` / `voloo trace ID` | Logs and serial transactions |
@@ -102,17 +102,16 @@ loads no external fonts or services.
 To try it without hardware: `voloo demo` starts a separate background process with
 simulated devices (its own home, USB scanning off) and opens the dashboard.
 
-## USB firmware maintenance (unreleased local change)
+## USB firmware maintenance
 
-`voloo firmware update DEV FILE` and the dashboard's **USB firmware** section
-coordinate port ownership inside the running daemon, reconnect to the same UID,
-and verify the application after updating. A/B firmware 2.9 trial-boots an inactive
-slot and confirms it only after host checks; a failed trial rolls back. Use
-`voloo firmware rollback DEV` for a verified return to the previous image.
+`voloo firmware update DEV` downloads the encrypted firmware paired with the
+installed CLI, reconnects to the same UID and verifies the result. The dashboard
+offers the same operation under **USB firmware**, plus optional local files and
+rollback. Use a compatible device and the package recommended for it.
 
-See [firmware updates](docs/firmware-updates.md) for packages, status/locks, legacy
-2.8 migration and the first-install power-loss recovery limit. No daemon stop is
-needed for normal device updates. These local changes are not yet on npm.
+The device must already be idle OFF, measurements must be valid and VOUT <= 1 V.
+Keep the daemon running during updating. Read fresh state after an unknown result.
+See [firmware updates](docs/firmware-updates.md) for user instructions and recovery limits.
 
 ## AI agents (MCP)
 

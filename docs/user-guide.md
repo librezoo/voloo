@@ -217,15 +217,20 @@ versions, device states and registers, recent faults and logs, and your settings
 contains no token, host name or user name, and nothing is sent anywhere; open it to
 check it, then attach it to your message.
 
-## USB firmware maintenance (local unreleased feature)
+## USB firmware maintenance
 
 Open a device's details in the dashboard and use **USB firmware**, or run:
 
 ```sh
 voloo firmware status DEV
-voloo firmware update DEV /path/to/firmware.voloofw
+voloo firmware update DEV
+voloo firmware update DEV /path/to/firmware.voloofw  # optional offline file
 voloo firmware rollback DEV
 ```
+
+Online updating downloads the encrypted firmware paired with this CLI release,
+then deletes its temporary file after verification or handled failure. Use a
+compatible device and the recommended package; contact support if it is refused.
 
 The background process handles port ownership and reconnection automatically.
 The output must already be OFF with valid readings and VOUT <= 1 V; locks still
