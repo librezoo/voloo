@@ -24,6 +24,7 @@ const UID_B: &str = "11-22-33-44-55-66-77-88";
 
 struct Sim {
     path: String,
+    slave: Option<serialport::TTYPort>,
     state: Shared,
     stop: Arc<AtomicBool>,
     server: Option<std::thread::JoinHandle<()>>,
@@ -32,7 +33,9 @@ impl Sim {
     fn new(cfg: SimConfig) -> Sim {
         let (master, slave) = serialport::TTYPort::pair().unwrap();
         let path = serialport::SerialPort::name(&slave).unwrap();
-        drop(slave);
+        // As in `voloo dev-sim`, keep the original slave open until unplug.
+        // Closing the final slave during daemon/update reconnection can leave
+        // a macOS PTY passing traffic in only one direction.
         let state = shared(cfg);
         let stop = Arc::new(AtomicBool::new(false));
         let server = {
@@ -41,6 +44,7 @@ impl Sim {
         };
         Sim {
             path,
+            slave: Some(slave),
             state,
             stop,
             server: Some(server),
@@ -52,6 +56,7 @@ impl Sim {
         if let Some(s) = self.server.take() {
             let _ = s.join();
         }
+        drop(self.slave.take());
     }
 }
 impl Drop for Sim {
