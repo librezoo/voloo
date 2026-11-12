@@ -48,10 +48,11 @@ const FAULT = localized({
   HOST_LOG_WRITE_FAILED: "Can't write logs",
 });
 const SOURCE = localized({ ui: 'Web', cli: 'Terminal', mcp: 'AI agent', http: 'API', daemon: 'Voloo' });
-const DONE = localized({ on: 'switched on', off: 'switched off', discharge: 'discharged', cycle: 'power-cycled', nickname: 'renamed' });
-const FAIL = localized({ on: 'switch on', off: 'switch off', discharge: 'discharge', cycle: 'power-cycle', nickname: 'rename' });
+const DONE = localized({ on: 'switched on', off: 'switched off', discharge: 'discharged', cycle: 'power-cycled', nickname: 'renamed', firmware_update: 'updated firmware', firmware_rollback: 'rolled back firmware' });
+const FAIL = localized({ on: 'switch on', off: 'switch off', discharge: 'discharge', cycle: 'power-cycle', nickname: 'rename', firmware_update: 'update firmware on', firmware_rollback: 'roll back firmware on' });
 const ACTION_STYLE = {
   on: ['var(--volt)', ICON.bolt], off: ['var(--text-2)', ICON.off], discharge: ['var(--apricot)', ICON.drain],
+  firmware_update: ['var(--sky)', ICON.cycle], firmware_rollback: ['var(--lilac)', ICON.cycle],
   cycle: ['var(--sky)', ICON.cycle], nickname: ['var(--lilac)', ICON.pencil],
 };
 
@@ -60,6 +61,7 @@ const state = {
   devices: new Map(), history: new Map(), pending: new Map(), unknown: new Map(),
   ops: [], faults: [], view: 'devices', feed: 'all', filter: '', live: false,
   sheet: null, cycleMs: 1000, cycleDischarge: true,
+  firmwareFiles: new Map(), firmwareMeta: new Map(), firmwareBoot: new Map(),
   localPending: new Set(), lockPending: new Set(),
 };
 let signedOut = false;
@@ -150,13 +152,14 @@ function visual(d) {
   const pending = state.pending.get(d.uid);
   if (!d.online) return 'offline';
   if (pending === 'discharge' || s.power_state === 'DISCHARGING') return 'discharge';
-  if (pending || s.busy || s.power_state === 'TURNING_ON') return 'busy';
+  if (firmwareActive(d) || pending || s.busy || s.power_state === 'TURNING_ON') return 'busy';
   if (state.unknown.has(d.uid) || activeFaults(d).some((f) => f.severity === 'error')) return 'fault';
   return s.output_enabled ? 'on' : 'off';
 }
 function chipText(d) {
   const s = d.status || {};
   const pending = state.pending.get(d.uid);
+  if (firmwareActive(d)) return firmwareStage(d.firmware.stage);
   if (!d.online) return tr('Offline');
   if (pending) return { on: tr('Switching on'), off: tr('Switching off'), discharge: tr('Discharging'), cycle: tr('Cycling'), nickname: tr('Renaming') }[pending] || tr('Working');
   if (s.power_state === 'TURNING_ON') return tr('Switching on');
@@ -171,7 +174,7 @@ function offlineReason(d) {
   const why = (d.faults || []).find((f) => f.active && ['LINK_UNPLUGGED', 'LINK_NO_RESPONSE', 'LINK_PORT_BUSY'].includes(f.code));
   return why ? FAULT[why.code] : tr('Not connected');
 }
-const canAct = (d) => !!d && state.live && !signedOut && d.online && !!d.status && !d.locked && !state.lockPending.has(d.uid) && !state.unknown.has(d.uid) && !state.pending.has(d.uid) && !d.status.busy;
+const canAct = (d) => !!d && state.live && !signedOut && d.online && !!d.status && !d.locked && !state.lockPending.has(d.uid) && !state.unknown.has(d.uid) && !state.pending.has(d.uid) && !firmwareActive(d) && !d.status.busy;
 const isFullyOff = (d) => { const s = d.status || {}; return s.state_code === 0 && !s.output_enabled && !s.discharge_enabled && !s.busy; };
 
 function upsert(snapshot) {
@@ -255,10 +258,32 @@ function relabel(btn, text) {
 }
 const holdHint = (d) => (d && d.status && d.status.output_enabled ? tr('Hold to switch off') : tr('Hold to switch on'));
 
+const firmwareActive = (d) => !!d?.firmware && !['completed', 'failed', 'rolled_back'].includes(d.firmware.stage);
+const firmwareReady = (d) => canAct(d) && isFullyOff(d) && d.status.vin_valid && d.status.vout_valid && Number.isFinite(d.status.vout_mv) && d.status.vout_mv <= 1000;
+const firmwareStage = (stage) => tr({ checking: 'Checking firmware', entering_update_mode: 'Entering update mode', installing_ab: 'Installing A/B support', uploading: 'Uploading firmware', reconnecting: 'Reconnecting', verifying: 'Verifying firmware', confirming: 'Confirming firmware', waiting_for_rollback: 'Waiting for automatic rollback', rolled_back: 'Previous firmware restored', completed: 'Firmware verified', failed: 'Firmware maintenance failed' }[stage] || 'Working');
+const firmwareVersion = (n) => Number.isInteger(n) ? `${n >> 8}.${n & 255}` : '—';
+async function refreshFirmware(uid) {
+  try { const r = await api('GET', `/v1/devices/${enc(uid)}/firmware`); state.firmwareBoot.set(uid, r.ab); render(); }
+  catch { /* The maintenance worker owns this device until verification finishes. */ }
+}
+async function updateFirmware(d, rollback = false) {
+  if (!firmwareReady(d)) return;
+  let body = {};
+  if (!rollback) {
+    const file = state.firmwareFiles.get(d.uid);
+    if (!file || file.size > 512 * 1024 || !file.size) return;
+    const data = Array.from(new Uint8Array(await file.arrayBuffer()));
+    if (state.firmwareFiles.get(d.uid) !== file || !firmwareReady(state.devices.get(d.uid))) return;
+    body = { data };
+  }
+  await act(d, rollback ? 'firmware_rollback' : 'firmware_update', 'POST', `/v1/devices/${enc(d.uid)}/firmware${rollback ? '/rollback' : ''}`, body);
+  refreshFirmware(d.uid);
+}
+
 // ---------- actions ----------
 async function act(d, action, method, path, body) {
   // Recheck at the end of a hold: a live update may have locked or disconnected it.
-  if (!canAct(d) || (action === 'nickname' && !isFullyOff(d))) return;
+  if (!canAct(d) || (action === 'nickname' && !isFullyOff(d)) || (action.startsWith('firmware_') && !firmwareReady(d))) return;
   const name = nameOf(d);
   state.localPending.add(d.uid);
   state.pending.set(d.uid, action);
@@ -268,9 +293,15 @@ async function act(d, action, method, path, body) {
     const r = await api(method, path, body);
     const current = state.devices.get(d.uid);
     if (current && action === 'nickname') current.nickname = r.nickname ?? body.nickname;
+    if (current && action.startsWith('firmware_')) {
+      current.identity = r.identity || current.identity;
+      current.firmware = { stage: 'completed', percent: 100 };
+      state.firmwareFiles.delete(d.uid); state.firmwareMeta.delete(d.uid);
+      if (r.boot) state.firmwareBoot.set(d.uid, r.boot);
+    }
     const status = r.status || r.on?.status;
     if (current && status) upsert({ uid: d.uid, status, observed_at: new Date().toISOString() });
-    let title = tr`${name} ${DONE[action]}`;
+    let title = action.startsWith('firmware_') ? tr('Firmware verified') : tr`${name} ${DONE[action]}`;
     if (r.outcome === 'already_satisfied') title = tr`${name} was already ${action === 'discharge' ? tr('discharged') : tr(action === 'on' ? 'On' : 'Off')}`;
     const vout = (r.status && r.status.vout_mv) ?? (r.on && r.on.status && r.on.status.vout_mv);
     const extra = action === 'discharge' && vout != null ? ` · ${v2(vout)} V` : r.elapsed_ms ? ` · ${r.elapsed_ms} ms` : '';
@@ -280,8 +311,15 @@ async function act(d, action, method, path, body) {
     // A lost HTTP reply does not cancel a device operation. Never silently retry it.
     if (e instanceof TypeError) e = { code: 'unknown', message: tr('Connection lost. Read the device state before trying another action.') };
     if (e.code === 'unknown') state.unknown.set(d.uid, e.message);
+    const restored = e.details?.update?.outcome === 'rolled_back';
+    if (restored) {
+      const current = state.devices.get(d.uid);
+      if (current) { current.identity = e.details.update.identity || current.identity; current.firmware = { stage: 'rolled_back', percent: 100 }; }
+      if (e.details.update.boot) state.firmwareBoot.set(d.uid, e.details.update.boot);
+      if (e.details.last_observed_status) upsert({ uid: d.uid, status: e.details.last_observed_status, observed_at: new Date().toISOString() });
+    }
     const hint = (e.faults || []).filter((f) => f.active || !f.condition).map((f) => f.suggestion)[0];
-    notify(e.code === 'unknown' ? 'warn' : 'bad', e.code === 'unknown' ? tr`${name}: result unknown` : tr`Couldn't ${FAIL[action]} ${name}`, tr(hint || e.message));
+    notify(restored || e.code === 'unknown' ? 'warn' : 'bad', restored ? tr('Previous firmware restored') : action.startsWith('firmware_') ? tr('Firmware maintenance failed') : e.code === 'unknown' ? tr`${name}: result unknown` : tr`Couldn't ${FAIL[action]} ${name}`, tr(hint || e.message));
     const tile = document.querySelector(`.tile[data-uid="${CSS.escape(d.uid)}"]`);
     if (tile) { tile.classList.remove('shake'); void tile.offsetWidth; tile.classList.add('shake'); }
   } finally {
@@ -423,6 +461,7 @@ function openSheet(uid) {
   if (!dlg.open) dlg.showModal();
   state.sheet.update(state.devices.get(uid));
   state.sheet.close.focus();
+  refreshFirmware(uid);
 }
 function cancelHolds(root) { root.querySelectorAll('button').forEach((b) => b.cancelHold?.()); }
 const closeSheet = () => { const dlg = $('sheet'); cancelHolds(dlg); if (dlg.open) dlg.close(); };
@@ -455,6 +494,28 @@ function makeSheet(uid) {
   const faultsTitle = h('div', { class: 'group-title' }, micro(tr('Needs attention')));
   const faultsGroup = h('div', { class: 'group' });
   const info = h('div', { class: 'group device-info' });
+  const firmwareFile = h('input', { type: 'file', accept: '.voloofw,.bin', hidden: true, class: 'firmware-file' });
+  const firmwareChoose = h('button', { class: 'pill-btn firmware-select', 'aria-label': tr('Firmware file'), onclick: () => firmwareFile.click() }, tr('Choose a local firmware file'));
+  const firmwareNote = h('p', { class: 'firmware-note' });
+  const firmwareTarget = h('p', { class: 'firmware-target' });
+  const firmwarePrevious = h('p', { class: 'firmware-note' });
+  const firmwareProgress = h('progress', { max: '100', value: '0', 'aria-label': tr('Firmware progress') });
+  const firmwareState = h('p', { class: 'firmware-state', role: 'status', 'aria-live': 'polite' });
+  const firmwareStart = holdButton('btn-firmware', tr('Update firmware'), tr('Hold to confirm'));
+  const firmwareRollback = holdButton('btn-firmware', tr('Roll back firmware'), tr('Hold to confirm'));
+  const firmwareGroup = h('div', { class: 'group firmware-group' }, firmwareChoose, firmwareFile, firmwareTarget, firmwareNote, firmwarePrevious, firmwareProgress, firmwareState, h('div', { class: 'firmware-buttons' }, firmwareStart, firmwareRollback));
+  firmwareFile.addEventListener('change', async () => {
+    const file = firmwareFile.files?.[0];
+    state.firmwareFiles.delete(uid); state.firmwareMeta.delete(uid);
+    if (file && (!file.size || file.size > 512 * 1024)) { notify('bad', tr('Invalid firmware file'), tr('Choose a firmware file up to 512 KiB.')); }
+    else if (file) {
+      state.firmwareFiles.set(uid, file);
+      try { const pkg = JSON.parse(await file.text()); if (state.firmwareFiles.get(uid) === file && Number.isInteger(pkg.firmware_version)) state.firmwareMeta.set(uid, pkg.firmware_version); } catch { /* Legacy BIN: the server validates its target marker. */ }
+    }
+    sheet.update(current());
+  });
+  holdable(firmwareStart, { onFire: () => updateFirmware(current()), hint: (b) => relabel(b, tr('Keep holding…')) });
+  holdable(firmwareRollback, { onFire: () => updateFirmware(current(), true), hint: (b) => relabel(b, tr('Keep holding…')) });
   const recentTitle = h('div', { class: 'group-title' }, micro(tr('Recent activity')));
   const recent = h('div', { class: 'group' });
 
@@ -470,7 +531,7 @@ function makeSheet(uid) {
     h('div', { class: 'group-title' }, micro(tr('Access'))),
     h('div', { class: 'group' }, h('div', { class: 'item' }, h('span', { class: 'k' }, h('b', {}, tr('Allow changes')), lockDesc), h('label', { class: 'switch' }, lockSwitch))),
     h('div', { class: 'group-title' }, micro(tr('Device'))),
-    info, recentTitle, recent);
+    info, h('div', { class: 'group-title' }, micro(tr('USB firmware'))), firmwareGroup, recentTitle, recent);
 
   holdable(glyphBtn, { onFire: () => toggle(current()), hint: (b) => bubble(b, holdHint(current())) });
   holdable(primary, { onFire: () => toggle(current()), hint: (b) => relabel(b, tr('Keep holding…')) });
@@ -539,7 +600,7 @@ function makeSheet(uid) {
     if (state.unknown.has(uid)) items.push(h('div', { class: 'callout bad', html: ICON.warn },
       h('span', {}, h('b', {}, tr('Result unknown. ')), state.unknown.get(uid), tr(' Read the device state before doing anything else.')),
       h('button', { class: 'x', disabled: !state.live || state.pending.has(uid), onclick: () => checkState(uid) }, tr('Check state'))));
-    if (!d.online) items.push(h('div', { class: 'callout warn', html: ICON.info }, h('span', {}, h('b', {}, `${offlineReason(d)}. `), tr('The output keeps whatever state it had, which is unknown from here. Reconnect the USB cable.'))));
+    if (!d.online && !firmwareActive(d)) items.push(h('div', { class: 'callout warn', html: ICON.info }, h('span', {}, h('b', {}, `${offlineReason(d)}. `), tr('The output keeps whatever state it had, which is unknown from here. Reconnect the USB cable.'))));
     if (d.online && !s.output_enabled && !s.busy && s.vout_valid && s.vout_mv > 1000) items.push(h('div', { class: 'callout warn', html: ICON.info }, h('span', {}, h('b', {}, tr`The load still holds ${v2(s.vout_mv)} V. `), tr('Switching off does not drain it — hold Discharge to bring it to ≤ 1 V.'))));
     setKeyed(callouts, `${state.live}|${state.pending.has(uid)}|` + items.map((x) => x.textContent).join('|'), () => items);
 
@@ -587,6 +648,23 @@ function makeSheet(uid) {
       row(tr('Hardware'), id.hardware_version || '—'),
       row(tr('Round trip'), p50 ? `${p50} ms p50 · ${(m.status_p99_us / 1000).toFixed(2)} ms p99` : '—')]);
 
+    const supported = !!(id.capabilities & 0x0c00);
+    const file = state.firmwareFiles.get(uid);
+    if (!file) firmwareFile.value = '';
+    const boot = state.firmwareBoot.get(uid);
+    const previous = boot?.previous_slot == null ? null : boot.versions?.[boot.previous_slot];
+    firmwareFile.disabled = firmwareChoose.disabled = !can || !supported;
+    firmwareStart.disabled = !firmwareReady(d) || !supported || !file;
+    firmwareRollback.disabled = !firmwareReady(d) || !(id.capabilities & 0x0800) || previous == null;
+    firmwareRollback.hidden = !(id.capabilities & 0x0800);
+    firmwareTarget.hidden = !file;
+    firmwarePrevious.hidden = !d.firmware || firmwareActive(d) || !(id.capabilities & 0x0800);
+    firmwarePrevious.textContent = !state.firmwareBoot.has(uid) ? tr('Checking firmware') : previous != null ? `${tr('Previous firmware')}: ${firmwareVersion(previous)}` : tr('No previous firmware is available.');
+    firmwareTarget.textContent = file ? `${file.name} · ${firmwareVersion(state.firmwareMeta.get(uid))}` : tr('Choose a local firmware file');
+    firmwareNote.textContent = !supported ? tr('This firmware does not support USB updates.') : !isFullyOff(d) || !s.vout_valid || s.vout_mv > 1000 ? tr('Switch off and confirm VOUT ≤ 1 V before updating.') : !(id.capabilities & 0x0800) && file?.name.endsWith('.voloofw') ? tr('First A/B installation replaces the boot program. Keep USB connected.') : tr('The background service reconnects and verifies the device. Output stays off.');
+    firmwareProgress.hidden = !d.firmware;
+    firmwareProgress.value = d.firmware?.percent || 0;
+    firmwareState.textContent = d.firmware ? `${firmwareStage(d.firmware.stage)} · ${d.firmware.percent}%` : previous != null ? `${tr('Previous firmware')}: ${firmwareVersion(previous)}` : tr('No previous firmware is available.');
     const mine = state.ops.filter((o) => o.uid === uid).slice(0, 5);
     recentTitle.hidden = recent.hidden = !mine.length;
     setKeyed(recent, mine.map((o) => `${o.at}${o.action}${o.ok}${ago(o.at)}`).join('|'), () => mine.map(opRow));
@@ -679,9 +757,12 @@ function opRow(o) {
   const d = state.devices.get(o.uid);
   const name = d ? nameOf(d) : o.uid;
   const failed = o.ok === false;
-  const [c, icon] = failed ? ['var(--coral)', ICON.x] : ACTION_STYLE[o.action] || ['var(--text-2)', ICON.off];
+  const restored = o.error?.details?.update?.outcome === 'rolled_back';
+  const [c, icon] = restored ? ['var(--apricot)', ICON.cycle] : failed ? ['var(--coral)', ICON.x] : ACTION_STYLE[o.action] || ['var(--text-2)', ICON.off];
   let title;
-  if (failed) title = o.error && o.error.code === 'unknown' ? tr`${name}: ${FAIL[o.action] || o.action} — result unknown` : tr`Couldn't ${FAIL[o.action] || o.action} ${name}`;
+  if (restored) title = `${name} · ${tr('Previous firmware restored')}`;
+  else if (failed && o.action?.startsWith('firmware_')) title = o.error?.code === 'unknown' ? tr`${name}: result unknown` : `${name} · ${tr('Firmware maintenance failed')}`;
+  else if (failed) title = o.error && o.error.code === 'unknown' ? tr`${name}: ${FAIL[o.action] || o.action} — result unknown` : tr`Couldn't ${FAIL[o.action] || o.action} ${name}`;
   else if (o.outcome === 'already_satisfied') title = tr`${name} was already ${o.action === 'discharge' ? tr('discharged') : tr(o.action === 'on' ? 'On' : 'Off')}`;
   else title = tr`${name} ${DONE[o.action] || o.action}`;
   const ico = h('span', { class: 'badge-ico', html: icon });
@@ -774,7 +855,7 @@ function draw() {
 function normalizeOp(r) {
   if ('ok' in r) return { at: r.at, uid: r.uid, action: r.action, source: r.source, ok: r.ok, outcome: r.outcome, error: r.error || null };
   const failed = !!r.error;
-  return { at: r.at, uid: r.uid, action: r.action, source: r.source, ok: !failed, outcome: r.outcome, error: failed ? { code: r.outcome, message: r.error } : null };
+  return { at: r.at, uid: r.uid, action: r.action, source: r.source, ok: !failed, outcome: r.outcome, error: failed ? (typeof r.error === 'object' ? r.error : { code: r.outcome, message: r.error }) : null };
 }
 async function refresh() {
   const [devices, ops, faults] = await Promise.all([api('GET', '/v1/devices'), api('GET', '/v1/operations?limit=200'), api('GET', '/v1/faults?limit=300')]);
@@ -815,11 +896,13 @@ function connect() {
     record(d.uid, e.data.status, e.data.observed_at);
   });
   on('device.locked', (e) => { const d = state.devices.get(e.data.uid); if (d) Object.assign(d, e.data); });
+  on('firmware.progress', (e) => { const d = state.devices.get(e.data.uid); if (d) d.firmware = e.data.firmware; });
   on('operation.started', (e) => { if (!state.pending.has(e.data.uid)) state.pending.set(e.data.uid, e.data.action); });
   on('operation.finished', (e) => {
     const op = normalizeOp({ ...e.data, at: e.at });
     state.ops = [op, ...state.ops].slice(0, 300);
     if (!state.localPending.has(op.uid)) state.pending.delete(op.uid);
+    if (op.action?.startsWith('firmware_')) refreshFirmware(op.uid);
     if (op.ok === false && op.error && op.error.code === 'unknown') state.unknown.set(op.uid, op.error.message);
     if (op.source !== 'ui') {
       const d = state.devices.get(op.uid);

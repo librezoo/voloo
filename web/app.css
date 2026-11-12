@@ -491,3 +491,16 @@ html:lang(zh) .bench-intro h2 { letter-spacing: 0; line-height: 1.35; }
   .device-info .v { grid-column: 1; text-align: left; min-width: 0; }
   .device-info .copy { grid-column: 2; grid-row: 2; }
 }
+
+/* Firmware maintenance follows the existing detail-sheet controls and themes. */
+.firmware-group { padding: 18px; display: grid; gap: 12px; }
+.firmware-file { width: 100%; min-width: 0; font: inherit; color: var(--text); }
+.firmware-file::file-selector-button { font: inherit; border: 1px solid var(--edge-2); border-radius: 8px; padding: 8px 12px; margin-right: 10px; background: var(--panel-hi); color: var(--text); cursor: pointer; }
+.firmware-note, .firmware-target, .firmware-state { margin: 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+.firmware-note { color: var(--text-2); }
+.firmware-target { font-weight: 650; }
+.firmware-group progress { width: 100%; height: 12px; accent-color: var(--lilac); }
+.firmware-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.firmware-buttons .hold-btn { min-width: 0; }
+
+.firmware-select { justify-self: start; }

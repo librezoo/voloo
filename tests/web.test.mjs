@@ -149,3 +149,43 @@ test('every shipped locale has the same interpolation fields as its source', () 
     }
   }
 });
+
+test('firmware maintenance from another client blocks power controls until it finishes', () => {
+  const d = dashboard();
+  d.run('state.live = true; state.devices.set("a", { uid: "a", online: true, status: { busy: false } }); connect();');
+  const send = (stage) => { const e = new Event('firmware.progress'); e.data = JSON.stringify({ data: { uid: 'a', firmware: { stage, percent: 50 } } }); d.events.dispatchEvent(e); };
+  send('uploading');
+  assert.equal(d.run('canAct(state.devices.get("a"))'), false);
+  send('reconnecting');
+  assert.equal(d.run('canAct(state.devices.get("a"))'), false);
+  send('completed');
+  assert.equal(d.run('canAct(state.devices.get("a"))'), true);
+});
+
+test('firmware controls require valid idle OFF and no residual voltage above 1 V', () => {
+  const d = dashboard();
+  d.run('state.live = true; globalThis.fwDevice = { uid: "a", online: true, status: { state_code: 0, power_state: "OFF", output_enabled: false, discharge_enabled: false, busy: false, vin_valid: true, vout_valid: true, vout_mv: 1000 } };');
+  assert.equal(d.run('firmwareReady(fwDevice)'), true);
+  for (const code of ['fwDevice.locked = true', 'fwDevice.status.vin_valid = false', 'fwDevice.status.vout_valid = false', 'fwDevice.status.vout_mv = 1001', 'fwDevice.status.output_enabled = true']) {
+    d.run('fwDevice.locked = false; Object.assign(fwDevice.status, {vin_valid: true, vout_valid: true, vout_mv: 1000, output_enabled: false});');
+    d.run(code); assert.equal(d.run('firmwareReady(fwDevice)'), false, code);
+  }
+});
+
+test('changing the lock while a firmware file is read cannot send an update', async () => {
+  const d = dashboard();
+  let resolve;
+  d.ctx.file = { size: 10, arrayBuffer: () => new Promise((r) => { resolve = r; }) };
+  d.run('state.live = true; globalThis.fwDevice = { uid: "a", online: true, status: { state_code: 0, power_state: "OFF", output_enabled: false, discharge_enabled: false, busy: false, vin_valid: true, vout_valid: true, vout_mv: 0 } }; state.devices.set("a", fwDevice); state.firmwareFiles.set("a", file); globalThis.calls = 0; act = async () => { calls++; };');
+  const pending = d.run('updateFirmware(fwDevice)');
+  d.run('fwDevice.locked = true'); resolve(new ArrayBuffer(10)); await pending;
+  assert.equal(d.run('calls'), 0);
+});
+
+test('structured firmware journal errors retain the recovery outcome and readable message', () => {
+  const d = dashboard();
+  d.ctx.record = { uid: 'a', action: 'firmware_update', outcome: 'failed', error: { code: 'device_failed', message: 'Previous firmware restored', details: { update: { outcome: 'rolled_back' } } } };
+  assert.equal(d.run('normalizeOp(record).error.message'), 'Previous firmware restored');
+  assert.equal(d.run('normalizeOp(record).error.details.update.outcome'), 'rolled_back');
+  assert.equal(d.run('normalizeOp({uid:"a",error:"old string error",outcome:"unknown"}).error.message'), 'old string error');
+});

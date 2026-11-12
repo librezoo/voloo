@@ -2,6 +2,32 @@
 'use strict';
 (() => {
 const messages = {
+  "Checking firmware": ["正在检查固件", "正在檢查韌體"],
+  "Entering update mode": ["正在进入升级模式", "正在進入更新模式"],
+  "Installing A/B support": ["正在安装 A/B 支持", "正在安裝 A/B 支援"],
+  "Uploading firmware": ["正在上传固件", "正在上傳韌體"],
+  "Verifying firmware": ["正在验证固件", "正在驗證韌體"],
+  "Confirming firmware": ["正在确认新固件", "正在確認新韌體"],
+  "Waiting for automatic rollback": ["正在等待自动回滚", "正在等待自動回復"],
+  "Previous firmware restored": ["已恢复先前固件", "已還原先前韌體"],
+  "Firmware verified": ["固件验证通过", "韌體驗證通過"],
+  "Firmware maintenance failed": ["固件操作未完成", "韌體操作未完成"],
+  "Firmware file": ["固件文件", "韌體檔案"],
+  "Firmware progress": ["固件升级进度", "韌體更新進度"],
+  "Update firmware": ["升级固件", "更新韌體"],
+  "Roll back firmware": ["回滚固件", "回復韌體"],
+  "Invalid firmware file": ["固件文件无效", "韌體檔案無效"],
+  "Choose a firmware file up to 512 KiB.": ["请选择不超过 512 KiB 的固件文件。", "請選擇不超過 512 KiB 的韌體檔案。"],
+  "USB firmware": ["USB 固件", "USB 韌體"],
+  "Choose a local firmware file": ["选择本机固件文件", "選擇本機韌體檔案"],
+  "This firmware does not support USB updates.": ["当前固件不支持 USB 在线升级。", "目前韌體不支援 USB 線上更新。"],
+  "Switch off and confirm VOUT ≤ 1 V before updating.": ["升级前请关闭输出，并确认 VOUT ≤ 1 V。", "更新前請關閉輸出，並確認 VOUT ≤ 1 V。"],
+  "First A/B installation replaces the boot program. Keep USB connected.": ["首次安装 A/B 会更新启动程序，请保持 USB 供电。", "首次安裝 A/B 會更新啟動程式，請保持 USB 供電。"],
+  "The background service reconnects and verifies the device. Output stays off.": ["后台服务会自动恢复连接并验证设备，输出保持关闭。", "背景服務會自動恢復連線並驗證裝置，輸出保持關閉。"],
+  "Previous firmware": ["可回滚固件", "可回復的韌體"],
+  "No previous firmware is available.": ["当前没有可回滚的固件。", "目前沒有可回復的韌體。"],
+  "updated firmware": ["已升级固件", "已更新韌體"],
+  "rolled back firmware": ["已回滚固件", "已回復韌體"],
   "Invalid device state response": [
     "设备状态响应无效",
     "裝置狀態回應無效"
