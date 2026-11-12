@@ -35,14 +35,33 @@ jobs:
           echo "VERSION=$version" >> "$GITHUB_ENV"
           ls -l dist/npm dist/pypi
           test "$(ls dist/npm/librezoo-voloo-*.tgz | wc -l)" = 6
-      - name: Publish platform packages, then the main package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          node packaging/npm/publish.mjs "$VERSION"
-      - name: GitHub release with all packages
+      - name: Obtain and inspect the paired encrypted firmware
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          flag=; case "$VERSION" in *-*) flag=--prerelease;; esac
-          gh release create "$GITHUB_REF_NAME" $flag --generate-notes dist/npm/*.tgz dist/pypi/*.whl
+          mkdir -p dist/firmware dist/firmware-client
+          # The publisher stages only ciphertext in this draft before tagging.
+          gh release download "$GITHUB_REF_NAME" --pattern voloo-switch-x035.voloofw --dir dist/firmware
+          tar -xzf "dist/npm/librezoo-voloo-linux-x64-$VERSION.tgz" -C dist/firmware-client
+          dist/firmware-client/package/bin/voloo --json firmware inspect dist/firmware/voloo-switch-x035.voloofw
+      - name: Make the complete release downloadable before npm publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" --clobber dist/npm/*.tgz dist/pypi/*.whl
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false
+      - name: Publish platform packages, then the main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node packaging/npm/publish.mjs "$VERSION"
+      - name: Check a clean registry install before advancing the default app version
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          install_dir=$(mktemp -d)
+          trap 'rm -rf "$install_dir"' EXIT
+          npm install --prefix "$install_dir" --ignore-scripts "@librezoo/voloo@$VERSION"
+          "$install_dir/node_modules/.bin/voloo" --version
+          "$install_dir/node_modules/.bin/voloo" firmware update --help
+          # Default installs already track this app's RC releases (rc.2 was latest).
+          npm dist-tag add "@librezoo/voloo@$VERSION" latest
