@@ -416,6 +416,28 @@ fn verify(
     nickname: &str,
     expected: Option<u16>,
 ) -> Result<(Identity, Status), OpError> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match verify_once(device, nickname, expected) {
+            Err(error)
+                if error.code == ErrorKind::LinkError
+                    && device.transport.broken.is_none()
+                    && Instant::now() < deadline =>
+            {
+                // These are reads only. A lost status/identity reply does not
+                // prove the trial is bad. Never retry semantic failures or a
+                // modifying command; confirmation still follows fresh checks.
+                thread::sleep(Duration::from_millis(20));
+            }
+            result => return result,
+        }
+    }
+}
+fn verify_once(
+    device: &mut Device,
+    nickname: &str,
+    expected: Option<u16>,
+) -> Result<(Identity, Status), OpError> {
     let info = device.info()?;
     if info.identity.uid != device.uid
         || info.identity.hardware_version != "3.0"

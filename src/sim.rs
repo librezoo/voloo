@@ -57,6 +57,8 @@ pub struct Inject {
     pub firmware_write_delay: Option<Duration>,
     pub fail_firmware_write: bool,
     pub firmware_settling_reads: u32,
+    /// Lose status replies only while an unconfirmed candidate is running.
+    pub drop_trial_status_replies: u32,
 }
 
 /// Firmware transport model for host/PTY tests. This does not model flash cells
@@ -686,6 +688,14 @@ impl Responder {
             let Some(mut reply) = s.handle(&frame) else {
                 continue;
             };
+            if frame[1] == 0x04
+                && frame[10..14] == [0, 0, 0, 6]
+                && s.firmware.as_ref().is_some_and(|fw| fw.trial == 2)
+                && s.inject.drop_trial_status_replies > 0
+            {
+                s.inject.drop_trial_status_replies -= 1;
+                continue;
+            }
             if frame[1] == 0x49 && s.inject.drop_update_ack == Some(frame[10]) {
                 s.inject.drop_update_ack = None;
                 continue;

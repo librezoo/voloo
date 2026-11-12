@@ -1055,6 +1055,42 @@ fn firmware_ack_loss_uses_evidence_without_repeating_mutations() {
     }
 }
 #[test]
+fn firmware_trial_retries_only_transient_reads_before_one_confirmation() {
+    for (dropped, succeeds) in [(1, true), (u32::MAX, false)] {
+        let rig = Rig::new("", 600);
+        {
+            let mut state = rig.sims[0].state.lock().unwrap();
+            state.enable_ab();
+            state.inject.drop_trial_status_replies = dropped;
+        }
+        rig.ready();
+        let data = serde_json::to_vec(&firmware_package(0x20a)).unwrap();
+        let (code, result) = rig.http(
+            "POST",
+            &format!("/v1/devices/{UID_A}/firmware"),
+            Some(json!({"data":data})),
+        );
+        assert_eq!(code, if succeeds { 200 } else { 502 }, "{result}");
+        if succeeds {
+            assert_eq!(result["status"]["power_state"], "OFF");
+            assert_eq!(result["identity"]["firmware_version"], "2.10");
+        } else {
+            assert_eq!(
+                result["error"]["details"]["update"]["outcome"],
+                "rolled_back"
+            );
+        }
+        let state = rig.sims[0].state.lock().unwrap();
+        let fw = state.firmware.as_ref().unwrap();
+        assert_eq!(
+            fw.actions.iter().filter(|&&action| action == 7).count(),
+            usize::from(succeeds)
+        );
+        assert!(state.inject.drop_trial_status_replies < dropped);
+        assert!(state.writes.is_empty());
+    }
+}
+#[test]
 fn firmware_failed_trial_rolls_back_and_failed_upload_releases_maintenance() {
     let rig = Rig::new("", 600);
     rig.sims[0].state.lock().unwrap().enable_ab();
