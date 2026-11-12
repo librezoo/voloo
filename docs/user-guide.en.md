@@ -16,6 +16,16 @@ Three things to keep in mind:
 - **If a result is “unknown”, read the state before doing anything else.** Voloo never
   repeats a power command on its own after a lost reply.
 
+## Voltage current and power boundaries
+
+For this supplied USB-C board, **3–30 V DC is a design-use reference range, not a full-range load qualification**. Do not exceed 30 V. Start with a light load at 3–5 V; unloaded conduction does not establish full-load operation.
+
+Use **3 A or less as an engineering reference ceiling**, with further derating for voltage drop, temperature and enclosure conditions. Full-voltage, full-temperature enclosed continuous-load ratings have not been established. A fuse or a single component rating is not a board-level continuous-current rating.
+
+Load power is `P = V × I`. At the 3 A reference current, 5/12/24/30 V correspond to 15/36/72/90 W **as arithmetic examples only**. In particular, 30 V × 3 A does not establish a qualified 90 W product rating. A separately validated maximum total-power rating is not claimed; where both current and power limits apply, use the stricter limit.
+
+Voloo does not regulate voltage or implement programmable current/power limiting. Set an appropriate current limit on the external supply and account for startup inrush, stall current and backfeed. Discharge is for residual load charge after external power is removed, not for draining batteries or absorbing continuously supplied power.
+
 ## 1. Install
 
 You need any USB cable that carries data (USB-A or USB-C to USB-C, USB 2.0 or 3.0).
