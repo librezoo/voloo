@@ -211,6 +211,7 @@ pub struct Device {
     pub uid: Uid,
     pub recorder: Arc<Recorder>,
     pub budgets: Budgets,
+    pub firmware_fc: u8,
     /// Who asked: cli, mcp, http, ui. Written to the operation journal.
     pub source: &'static str,
 }
@@ -222,6 +223,7 @@ impl Device {
             uid,
             recorder,
             budgets: Budgets::default(),
+            firmware_fc: 0x49,
             source: "cli",
         }
     }
@@ -458,6 +460,11 @@ impl Device {
             .at(trace_id, self.uid)
             .details(json!({"reported_uid": identity.uid.to_string()})));
         }
+        self.firmware_fc = if identity.capabilities & protocol::CAP_SEALED != 0 {
+            0x4A
+        } else {
+            0x49
+        };
         Ok(identity)
     }
 

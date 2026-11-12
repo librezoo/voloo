@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use std::{
     fs,
     io::Read,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::Arc,
     thread,
@@ -51,6 +51,8 @@ pub struct AbStatus {
     pub trial_state: u8,
     pub upload_slot: Option<u8>,
     pub upload_failed: bool,
+    pub encrypted: bool,
+    pub protection_flags: u8,
     pub versions: [u16; 2],
     pub lengths: [u16; 2],
     pub crcs: [u16; 2],
@@ -61,7 +63,13 @@ pub struct AbStatus {
 }
 impl AbStatus {
     pub fn decode(p: &[u8]) -> Result<Self, OpError> {
-        if p.len() != 32 || p[0] != 1 || p[1] > 1 || p[2] > 1 || p[5] > 2 || p[7] > 1 {
+        if p.len() != 32
+            || !matches!(p[0], 1 | 2)
+            || p[1] > 1
+            || p[2] > 1
+            || p[5] > 2
+            || p[7] > if p[0] == 2 { 15 } else { 1 }
+        {
             return Err(failed("Invalid A/B status response"));
         }
         let slot = |n: u8| -> Result<Option<u8>, OpError> {
@@ -80,7 +88,9 @@ impl AbStatus {
             candidate_slot: slot(p[4])?,
             trial_state: p[5],
             upload_slot: slot(p[6])?,
-            upload_failed: p[7] != 0,
+            upload_failed: p[7] & 1 != 0,
+            encrypted: p[0] == 2,
+            protection_flags: p[7] & 14,
             versions: [w(8), w(10)],
             lengths: [w(12), w(14)],
             crcs: [w(16), w(18)],
@@ -108,9 +118,75 @@ pub struct Bundle {
     pub slot_b: Vec<u8>,
     pub factory: Vec<u8>,
 }
+#[derive(Clone, Debug, Deserialize)]
+pub struct Recipient {
+    pub uid: String,
+    pub nonce: Vec<u8>,
+    pub wrapped_key: Vec<u8>,
+    pub tag: Vec<u8>,
+}
+#[derive(Clone, Debug, Deserialize)]
+pub struct SealedBundle {
+    pub format: String,
+    pub hardware_version: u16,
+    pub firmware_version: u16,
+    pub header: Vec<u8>,
+    pub cipher_a: Vec<u8>,
+    pub cipher_b: Vec<u8>,
+    pub recipients: Vec<Recipient>,
+}
+impl SealedBundle {
+    fn word(&self, offset: usize) -> u16 {
+        u16::from_be_bytes([self.header[offset], self.header[offset + 1]])
+    }
+    fn validate(&self) -> Result<(), OpError> {
+        if self.format != "voloo-x035-sealed-v1"
+            || self.hardware_version != 0x300
+            || self.firmware_version < 0x300
+            || self.header.len() != 48
+            || &self.header[..4] != b"VSE1"
+            || self.word(4) != self.hardware_version
+            || self.word(6) != self.firmware_version
+        {
+            return Err(invalid("Invalid encrypted X035 firmware header"));
+        }
+        if self.header[16..32] == self.header[32..48] {
+            return Err(invalid("Encrypted slots must not reuse a nonce prefix"));
+        }
+        for (i, data) in [&self.cipher_a, &self.cipher_b].into_iter().enumerate() {
+            let n = self.word(8 + 2 * i) as usize;
+            if !(176..=SLOT_BYTES).contains(&n)
+                || !n.is_multiple_of(4)
+                || data.len() != n + n.div_ceil(128) * 16
+            {
+                return Err(invalid("Invalid encrypted slot size"));
+            }
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for r in &self.recipients {
+            let uid = r
+                .uid
+                .parse::<Uid>()
+                .map_err(|_| invalid("Invalid recipient UID"))?;
+            if !seen.insert(uid)
+                || r.nonce.len() != 24
+                || r.wrapped_key.len() != 32
+                || r.tag.len() != 16
+            {
+                return Err(invalid("Invalid encrypted device ticket"));
+            }
+        }
+        if seen.is_empty() {
+            return Err(invalid("Encrypted firmware has no enrolled device ticket"));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Image {
     Ab(Bundle),
+    Sealed(SealedBundle),
     Legacy(Vec<u8>),
 }
 impl Image {
@@ -119,6 +195,30 @@ impl Image {
             return Err(invalid("Firmware file is empty or exceeds 512 KiB"));
         }
         if data.iter().copied().find(|b| !b.is_ascii_whitespace()) == Some(b'{') {
+            let shape: Value = serde_json::from_slice(data)
+                .map_err(|e| invalid(format!("Invalid firmware JSON: {e}")))?;
+            if shape["format"] == "voloo-x035-sealed-v1" {
+                if [
+                    "factory",
+                    "slot_a",
+                    "slot_b",
+                    "content_key",
+                    "device_key",
+                    "devices",
+                    "releases",
+                ]
+                .iter()
+                .any(|key| shape.get(key).is_some())
+                {
+                    return Err(invalid(
+                        "Private/plaintext fields cannot be included in a distributable encrypted package",
+                    ));
+                }
+                let sealed: SealedBundle =
+                    serde_json::from_value(shape).map_err(|e| invalid(e.to_string()))?;
+                sealed.validate()?;
+                return Ok(Self::Sealed(sealed));
+            }
             let b: Bundle = serde_json::from_slice(data)
                 .map_err(|e| invalid(format!("Invalid firmware package: {e}")))?;
             if b.format != "voloo-x035-ab-v1"
@@ -162,6 +262,19 @@ impl Image {
         }
     }
 }
+/// Offline inspection is structural. Only the device can authenticate a ticket.
+pub fn inspect(data: &[u8]) -> Result<Value, OpError> {
+    let image = Image::parse(data)?;
+    match image {
+        Image::Sealed(bundle) => Ok(
+            json!({"encrypted":true,"format":bundle.format,"hardware_version":protocol::version(bundle.hardware_version),"firmware_version":protocol::version(bundle.firmware_version),"recipients":bundle.recipients.len(),"bytes":data.len(),"authentication":"verified by the device, not by offline inspection"}),
+        ),
+        _ => Err(invalid(
+            "This release requires an encrypted firmware package; plaintext publishing was refused",
+        )),
+    }
+}
+
 fn contains(data: &[u8], needle: &[u8]) -> bool {
     data.windows(needle.len()).any(|w| w == needle)
 }
@@ -226,7 +339,7 @@ pub fn ab_request(
     action: u8,
     payload: &[u8],
 ) -> Result<AbStatus, OpError> {
-    let req = protocol::firmware_request(device.uid, action, payload)
+    let req = protocol::firmware_request_on(device.uid, device.firmware_fc, action, payload)
         .map_err(|e| invalid(e.to_string()))?;
     match device
         .transport
@@ -249,13 +362,13 @@ pub fn ab_request(
 }
 pub fn status(device: &mut Device) -> Result<Value, OpError> {
     let info = device.info()?;
-    let ab = if info.identity.capabilities & CAP_AB_UPDATE != 0 {
+    let ab = if info.identity.capabilities & (CAP_AB_UPDATE | protocol::CAP_SEALED) != 0 {
         Some(ab_request(device, &new_trace_id(), 0, &[])?)
     } else {
         None
     };
     Ok(
-        json!({"uid":device.uid,"identity":info.identity,"ab":ab,"supports_usb_update":info.identity.capabilities & (CAP_AB_UPDATE|CAP_USB_ISP)!=0,"supports_rollback":ab.as_ref().is_some_and(|b|b.previous_slot.is_some())}),
+        json!({"uid":device.uid,"identity":info.identity,"ab":ab,"supports_usb_update":info.identity.capabilities & (CAP_AB_UPDATE|CAP_USB_ISP|protocol::CAP_SEALED)!=0,"supports_rollback":ab.as_ref().is_some_and(|b|b.previous_slot.is_some())}),
     )
 }
 
@@ -322,12 +435,83 @@ fn verify(
     Ok((info.identity, s))
 }
 
+struct TransferPlan {
+    version: u16,
+    length: usize,
+    crc: u16,
+    begin: Vec<u8>,
+    packets: Vec<Vec<u8>>,
+}
+fn transfer_plan(image: &Image, uid: Uid, slot: u8) -> Result<TransferPlan, OpError> {
+    match image {
+        Image::Ab(bundle) => {
+            let app = if slot == 0 {
+                &bundle.slot_a
+            } else {
+                &bundle.slot_b
+            };
+            let crc = protocol::crc16(app);
+            let mut begin = vec![slot, 0];
+            begin.extend_from_slice(&(app.len() as u16).to_be_bytes());
+            begin.extend_from_slice(&crc.to_be_bytes());
+            begin.extend_from_slice(&bundle.firmware_version.to_be_bytes());
+            let packets = app
+                .chunks(128)
+                .enumerate()
+                .map(|(i, c)| {
+                    let mut p = (i as u16 * 128).to_be_bytes().to_vec();
+                    p.extend_from_slice(c);
+                    p
+                })
+                .collect();
+            Ok(TransferPlan {
+                version: bundle.firmware_version,
+                length: app.len(),
+                crc,
+                begin,
+                packets,
+            })
+        }
+        Image::Sealed(bundle) => {
+            let recipient=bundle.recipients.iter().find(|r|r.uid.parse::<Uid>().ok()==Some(uid)).ok_or_else(||invalid("No encrypted ticket exists for this UID; trusted factory enrolment is required"))?;
+            let length = bundle.word(8 + 2 * slot as usize) as usize;
+            let cipher = if slot == 0 {
+                &bundle.cipher_a
+            } else {
+                &bundle.cipher_b
+            };
+            let mut begin = vec![slot];
+            begin.extend_from_slice(&bundle.header);
+            begin.extend_from_slice(&recipient.nonce);
+            begin.extend_from_slice(&recipient.wrapped_key);
+            begin.extend_from_slice(&recipient.tag);
+            let mut packets = Vec::new();
+            let mut encrypted_offset = 0;
+            for offset in (0..length).step_by(128) {
+                let n = 128.min(length - offset);
+                let mut p = (offset as u16).to_be_bytes().to_vec();
+                p.extend_from_slice(&cipher[encrypted_offset..encrypted_offset + n + 16]);
+                encrypted_offset += n + 16;
+                packets.push(p);
+            }
+            Ok(TransferPlan {
+                version: bundle.firmware_version,
+                length,
+                crc: bundle.word(12 + 2 * slot as usize),
+                begin,
+                packets,
+            })
+        }
+        _ => Err(invalid("A/B updates require a complete firmware package")),
+    }
+}
+
 /// Every mutation is sent once. A missing BEGIN/WRITE ACK is resolved only by
 /// querying the session/offset; it never causes a second erase or write request.
 fn transfer(
     device: &mut Device,
     trace: &str,
-    bundle: &Bundle,
+    image: &Image,
     initial: &AbStatus,
     progress: &mut dyn FnMut(Progress),
 ) -> Result<u8, OpError> {
@@ -337,16 +521,12 @@ fn transfer(
         ));
     }
     let slot = 1 - initial.running_slot;
-    let app = if slot == 0 {
-        &bundle.slot_a
-    } else {
-        &bundle.slot_b
-    };
-    let crc = protocol::crc16(app);
+    let plan = transfer_plan(image, device.uid, slot)?;
+    let crc = plan.crc;
     if initial.trial_state == 1
         && initial.candidate_slot == Some(slot)
-        && initial.versions[slot as usize] == bundle.firmware_version
-        && initial.lengths[slot as usize] as usize == app.len()
+        && initial.versions[slot as usize] == plan.version
+        && initial.lengths[slot as usize] as usize == plan.length
         && initial.crcs[slot as usize] == crc
     {
         ab_request(device, trace, 6, &[])?;
@@ -358,16 +538,12 @@ fn transfer(
             return cancel.map(|_| slot);
         }
     }
-    let mut payload = vec![slot, 0];
-    payload.extend_from_slice(&(app.len() as u16).to_be_bytes());
-    payload.extend_from_slice(&crc.to_be_bytes());
-    payload.extend_from_slice(&bundle.firmware_version.to_be_bytes());
-    let started = ab_request(device, trace, 1, &payload).or_else(|e| {
+    let started = ab_request(device, trace, 1, &plan.begin).or_else(|e| {
         let got = ab_request(device, trace, 0, &[])?;
         if !got.upload_failed
             && got.upload_slot == Some(slot)
             && got.received == 0
-            && got.upload_length as usize == app.len()
+            && got.upload_length as usize == plan.length
         {
             Ok(got)
         } else {
@@ -377,32 +553,30 @@ fn transfer(
     if started.upload_slot != Some(slot) || started.upload_failed {
         return Err(failed("Device did not prepare the inactive slot"));
     }
-    for (i, chunk) in app.chunks(128).enumerate() {
-        let offset = i * 128;
-        let mut data = (offset as u16).to_be_bytes().to_vec();
-        data.extend_from_slice(chunk);
-        let accepted = ab_request(device, trace, 2, &data).or_else(|e| {
+    for (i, data) in plan.packets.iter().enumerate() {
+        let received = ((i + 1) * 128).min(plan.length);
+        let accepted = ab_request(device, trace, 2, data).or_else(|e| {
             let got = ab_request(device, trace, 0, &[])?;
             if !got.upload_failed
                 && got.upload_slot == Some(slot)
-                && got.received as usize == offset + chunk.len()
+                && got.received as usize == received
             {
                 Ok(got)
             } else {
                 Err(e)
             }
         })?;
-        if accepted.upload_failed || accepted.received as usize != offset + chunk.len() {
+        if accepted.upload_failed || accepted.received as usize != received {
             return Err(failed(
-                "Firmware upload offset or flash verification failed",
+                "Encrypted/ordinary upload offset or flash verification failed",
             ));
         }
         progress(Progress {
             stage: "uploading".into(),
-            percent: (15 + 65 * (offset + chunk.len()) / app.len()) as u8,
+            percent: (15 + 65 * received / plan.length) as u8,
             connected: true,
-            written: offset + chunk.len(),
-            total: app.len(),
+            written: received,
+            total: plan.length,
         });
     }
     progress(Progress::new("verifying", 82, true));
@@ -547,13 +721,116 @@ fn await_boot(
     ))
 }
 
+/// Paired encrypted firmware asset in this public host release. The MCU source
+/// repository is private; no private-repository credential is needed by users.
+pub fn download_url() -> String {
+    format!(
+        "https://github.com/librezoo/voloo/releases/download/v{}/voloo-switch-x035.voloofw",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+struct Downloaded {
+    _file: TempImage,
+    image: Image,
+}
+impl Downloaded {
+    fn stage(mut reader: impl Read, parent: &Path, trace: &str) -> Result<Self, OpError> {
+        use std::io::Write;
+        let file = TempImage::create(parent, trace, "voloo-switch-x035.voloofw")?;
+        let mut output = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&file.path)
+            .map_err(|e| invalid(format!("Cannot stage encrypted firmware: {e}")))?;
+        let copied = std::io::copy(&mut reader.by_ref().take(MAX_FILE as u64 + 1), &mut output)
+            .map_err(|e| {
+                OpError::new(
+                    ErrorKind::LinkError,
+                    format!("Firmware download failed: {e}"),
+                )
+            })?;
+        output.flush().map_err(|e| invalid(e.to_string()))?;
+        drop(output);
+        if copied > MAX_FILE as u64 {
+            return Err(invalid("Downloaded firmware exceeds 512 KiB"));
+        }
+        let bytes = fs::read(&file.path).map_err(|e| invalid(e.to_string()))?;
+        let image = Image::parse(&bytes)?;
+        if !matches!(image, Image::Sealed(_)) {
+            return Err(invalid(
+                "The online asset must be encrypted firmware; plaintext was refused",
+            ));
+        }
+        Ok(Self { _file: file, image })
+    }
+    fn fetch() -> Result<Self, OpError> {
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .https_only(true)
+            .max_redirects(5)
+            .timeout_global(Some(Duration::from_secs(30)))
+            .build()
+            .into();
+        let mut response = agent
+            .get(&download_url())
+            .header("Accept", "application/octet-stream")
+            .call()
+            .map_err(|e| {
+                OpError::new(
+                    ErrorKind::LinkError,
+                    format!("Cannot download the paired encrypted firmware: {e}"),
+                )
+            })?;
+        Self::stage(
+            response.body_mut().as_reader(),
+            &std::env::temp_dir(),
+            &new_trace_id(),
+        )
+    }
+}
+
+pub fn perform_online(
+    device: &mut Device,
+    scan_usb: bool,
+    progress: &mut dyn FnMut(Progress),
+) -> Result<Value, OpError> {
+    progress(Progress::new("checking", 0, true));
+    let info = device.info()?;
+    if info.identity.hardware_version != "3.0"
+        || info.identity.capabilities & protocol::CAP_SEALED == 0
+    {
+        return Err(invalid(
+            "Encrypted online updates require one-time trusted factory initialization; no plaintext firmware will be downloaded or flashed",
+        ));
+    }
+    let security = ab_request(device, &new_trace_id(), 0, &[])?;
+    if !security.encrypted || security.protection_flags != 14 {
+        return Err(invalid(
+            "Factory security initialization is incomplete: read protection, boot write protection and device-key write protection must be enabled before online updates",
+        ));
+    }
+    wait_off(device, Duration::from_secs(1))?;
+    progress(Progress::new("downloading", 0, true));
+    let downloaded = Downloaded::fetch()?;
+    let result = perform(device, Some(downloaded.image.clone()), scan_usb, progress);
+    // The guard remains alive through reconnect/confirmation/rollback. All
+    // exits, including download/parse errors, remove its private temp directory.
+    drop(downloaded);
+    result
+}
+
 struct TempImage {
     dir: PathBuf,
     path: PathBuf,
 }
 impl TempImage {
     fn new(data: &[u8], trace: &str) -> Result<Self, OpError> {
-        let dir = std::env::temp_dir().join(format!("voloo-firmware-{trace}"));
+        let image = Self::create(&std::env::temp_dir(), trace, "voloo-switch-x035.bin")?;
+        fs::write(&image.path, data)
+            .map_err(|e| invalid(format!("Cannot write firmware image: {e}")))?;
+        Ok(image)
+    }
+    fn create(parent: &Path, trace: &str, name: &str) -> Result<Self, OpError> {
+        let dir = parent.join(format!("voloo-firmware-{trace}"));
         let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
         {
@@ -563,11 +840,8 @@ impl TempImage {
         builder
             .create(&dir)
             .map_err(|e| invalid(format!("Cannot create private firmware directory: {e}")))?;
-        let path = dir.join("voloo-switch-x035.bin");
-        let image = Self { dir, path };
-        fs::write(&image.path, data)
-            .map_err(|e| invalid(format!("Cannot write firmware image: {e}")))?;
-        Ok(image)
+        let path = dir.join(name);
+        Ok(Self { dir, path })
     }
 }
 impl Drop for TempImage {
@@ -650,6 +924,11 @@ fn legacy(
     let data = match image {
         Image::Ab(b) => &b.factory,
         Image::Legacy(data) => data,
+        Image::Sealed(_) => {
+            return Err(invalid(
+                "Encrypted firmware needs trusted factory initialization; it cannot migrate through a public factory image",
+            ));
+        }
     };
     if data.len().div_ceil(1024) + 1 > 0xEC00 / 1024 {
         return Err(invalid("Firmware erase range overlaps configuration"));
@@ -765,17 +1044,21 @@ pub fn perform(
     }
     let nickname = original.nickname.unwrap_or_default();
     let mut result = (|| {
-        if original.identity.capabilities & CAP_AB_UPDATE != 0 {
+        if original.identity.capabilities & (CAP_AB_UPDATE | protocol::CAP_SEALED) != 0 {
             let initial = ab_request(device, &trace, 0, &[])?;
             let (target, version) = if let Some(image) = &image {
-                let Image::Ab(bundle) = image else {
-                    return Err(invalid(
-                        "An A/B device requires a .voloofw package; a raw BIN would not preserve rollback",
-                    ));
+                let version = match image {
+                    Image::Sealed(bundle) if initial.encrypted => bundle.firmware_version,
+                    Image::Ab(bundle) if !initial.encrypted => bundle.firmware_version,
+                    _ => {
+                        return Err(invalid(
+                            "Encrypted devices require sealed firmware; legacy devices require trusted initialization before sealed updates",
+                        ));
+                    }
                 };
                 (
-                    transfer(device, &trace, bundle, &initial, progress)?,
-                    bundle.firmware_version,
+                    transfer(device, &trace, image, &initial, progress)?,
+                    version,
                 )
             } else {
                 let target = initial
@@ -837,4 +1120,77 @@ pub fn perform(
         "outcome":result.as_ref().ok().and_then(|v|v.get("outcome")).cloned().unwrap_or_else(||json!("failed")),
         "after":result.as_ref().ok().and_then(|v|v.get("status")),"error":result.as_ref().err()}));
     result
+}
+
+#[cfg(test)]
+mod download_tests {
+    use super::*;
+    fn encrypted_file() -> Vec<u8> {
+        let mut header = vec![0; 48];
+        header[..4].copy_from_slice(b"VSE1");
+        header[4..8].copy_from_slice(&[3, 0, 3, 0]);
+        header[8..12].copy_from_slice(&[2, 0, 2, 0]);
+        header[32] = 1;
+        serde_json::to_vec(&json!({"format":"voloo-x035-sealed-v1","hardware_version":0x300,"firmware_version":0x300,
+            "header":header,"cipher_a":vec![0u8;576],"cipher_b":vec![0u8;576],
+            "recipients":[{"uid":"01-02-03-04-05-06-07-08","nonce":vec![0u8;24],"wrapped_key":vec![0u8;32],"tag":vec![0u8;16]}]})).unwrap()
+    }
+    #[test]
+    fn encrypted_download_lives_through_update_and_cleans_on_success_and_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let bytes = encrypted_file();
+        {
+            let downloaded = Downloaded::stage(&bytes[..], temp.path(), "success").unwrap();
+            assert!(downloaded._file.path.exists());
+            assert!(matches!(downloaded.image, Image::Sealed(_)));
+            // Both successful confirmation and an update/rollback error leave
+            // this scope. No caller needs a separate deletion command.
+        }
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+        let outcome: Result<(), OpError> = (|| {
+            let _downloaded = Downloaded::stage(&bytes[..], temp.path(), "failed-update")?;
+            Err(failed("device trial rolled back"))
+        })();
+        assert!(outcome.is_err());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+    #[test]
+    fn truncated_oversized_and_plaintext_downloads_leave_no_cache() {
+        let temp = tempfile::tempdir().unwrap();
+        for (name, bytes) in [
+            ("truncated", b"{\"format\":".to_vec()),
+            ("oversize", vec![0u8; MAX_FILE + 1]),
+            (
+                "plaintext",
+                b"VolooSwitch:CH32X035F8U6:USB-ISP:1\0".to_vec(),
+            ),
+        ] {
+            assert!(Downloaded::stage(&bytes[..], temp.path(), name).is_err());
+            assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+        }
+        struct Broken(bool);
+        impl Read for Broken {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.0 {
+                    Err(std::io::Error::other("interrupted network"))
+                } else {
+                    self.0 = true;
+                    buf[..2].copy_from_slice(b"{\"");
+                    Ok(2)
+                }
+            }
+        }
+        assert!(Downloaded::stage(Broken(false), temp.path(), "network").is_err());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+    #[test]
+    fn downloaded_asset_is_paired_with_this_public_release() {
+        assert_eq!(
+            download_url(),
+            format!(
+                "https://github.com/librezoo/voloo/releases/download/v{}/voloo-switch-x035.voloofw",
+                env!("CARGO_PKG_VERSION")
+            )
+        );
+    }
 }

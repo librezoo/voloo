@@ -395,7 +395,8 @@ async fn device_diagnostics(
 }
 #[derive(Deserialize)]
 struct FirmwareBody {
-    data: Vec<u8>,
+    #[serde(default)]
+    data: Option<Vec<u8>>,
 }
 async fn device_firmware(
     State(app): State<App>,
@@ -414,12 +415,11 @@ async fn device_firmware_update(
     h: HeaderMap,
     Json(body): Json<FirmwareBody>,
 ) -> ApiResult {
-    let image = firmware::Image::parse(&body.data)?;
-    Ok(Json(
-        app.manager
-            .call(target(&id), Job::Firmware(image), source(&h))
-            .await?,
-    ))
+    let job = match body.data {
+        Some(data) => Job::Firmware(firmware::Image::parse(&data)?),
+        None => Job::FirmwareOnline,
+    };
+    Ok(Json(app.manager.call(target(&id), job, source(&h)).await?))
 }
 async fn device_firmware_rollback(
     State(app): State<App>,

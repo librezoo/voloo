@@ -80,3 +80,38 @@ fn firmware_frames_are_uid_action_length_and_crc_qualified() {
     state[1] = 2;
     assert!(AbStatus::decode(&state).is_err());
 }
+
+#[test]
+fn sealed_frames_keep_protocol_identity_and_factory_lock_out_of_public_actions() {
+    let uid: Uid = "01-23-45-67-89-AB-CD-EF".parse().unwrap();
+    let request = protocol::firmware_request_on(uid, 0x4a, 2, &[0; 146]).unwrap();
+    assert_eq!(request.frame.len(), 160);
+    assert_eq!(protocol::crc16(&request.frame), 0);
+    let mut state = vec![2, 0, 0, 1, 255, 0, 255, 14];
+    state.resize(32, 0);
+    let mut reply = vec![0xf7, 0x4a];
+    reply.extend_from_slice(&uid.0);
+    reply.extend_from_slice(&[2, 32]);
+    reply.extend_from_slice(&state);
+    let reply = protocol::with_crc(reply);
+    let mut decoder = FrameDecoder::default();
+    let frames: Vec<_> = reply
+        .chunks(2)
+        .flat_map(|chunk| decoder.push(chunk))
+        .collect();
+    assert_eq!(frames.len(), 1);
+    assert_eq!(
+        protocol::match_reply(uid, &request.expect, &frames[0]),
+        Some(Matched::Firmware(state.clone()))
+    );
+    let legacy = protocol::firmware_request(uid, 2, &[]).unwrap();
+    assert!(protocol::match_reply(uid, &legacy.expect, &reply).is_none());
+    let status = AbStatus::decode(&state).unwrap();
+    assert!(status.encrypted);
+    assert_eq!(status.protection_flags, 14);
+    assert!(protocol::firmware_request_on(uid, 0x4a, 8, &[0; 40]).is_err());
+    let mut exception = vec![0xf7, 0xca];
+    exception.extend_from_slice(&uid.0);
+    exception.push(4);
+    assert_eq!(decoder.push(&protocol::with_crc(exception)).len(), 1);
+}
