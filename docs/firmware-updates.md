@@ -166,7 +166,15 @@ flags 14; encrypted updating and explicit rollback passed again with protection
 active, followed by a USB-only cold boot. A read-only WCH-Link check did not recover
 the provisioned boot/key bytes; attaching the debugger interrupted execution and
 required disconnecting it and power-cycling USB. Leave the debugger disconnected
-for normal use. Online release downloading is a separate remaining check.
+for normal use. The protected non-booting-candidate watchdog test also passed
+after this USB-only cold boot.
+The published `@librezoo/voloo@0.7.0-rc.6` was then freshly installed from npm on
+macOS ARM. Its CLI and dashboard completed no-file online downloads from the public
+release, encrypted updates and state verification; the dashboard also confirmed
+rollback. During the CLI operation, an owner-only temporary directory containing
+ciphertext was observed and then removed, and the daemon PID stayed unchanged.
+Every final result reported protection flags 14 and output OFF.
+
 Earlier plaintext A/B tests also covered 2.8 migration and the real dashboard.
 
 Evidence is kept outside the repository in workspace `output/` directories;
