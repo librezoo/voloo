@@ -64,10 +64,19 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          install_dir=$(mktemp -d)
-          trap 'rm -rf "$install_dir"' EXIT
-          npm install --prefix "$install_dir" --ignore-scripts "@librezoo/voloo@$VERSION"
-          "$install_dir/node_modules/.bin/voloo" --version
-          "$install_dir/node_modules/.bin/voloo" firmware update --help
-          # Default installs already track this app's RC releases (rc.2 was latest).
-          npm dist-tag add "@librezoo/voloo@$VERSION" latest
+          install_root=$(mktemp -d)
+          trap 'rm -rf "$install_root"' EXIT
+          # npm can acknowledge publication before registry reads see it.
+          # Each attempt has a fresh prefix so optional-dependency misses cannot
+          # leave a partial installation for the next verification.
+          for attempt in {1..20}; do
+            install_dir="$install_root/attempt-$attempt"
+            if npm install --prefix "$install_dir" --ignore-scripts --prefer-online "@librezoo/voloo@$VERSION" \
+              && "$install_dir/node_modules/.bin/voloo" --version \
+              && "$install_dir/node_modules/.bin/voloo" firmware update --help; then
+              npm dist-tag add "@librezoo/voloo@$VERSION" latest
+              exit 0
+            fi
+            test "$attempt" -lt 20 || exit 1
+            sleep 15
+          done
