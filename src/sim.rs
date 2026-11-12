@@ -864,13 +864,18 @@ pub fn serve_tty(
     port.set_timeout(Duration::from_millis(1)).ok();
     let mut buf = [0u8; 256];
     while !stop.load(std::sync::atomic::Ordering::Relaxed) {
-        if let Ok(n) = port.read(&mut buf) {
-            responder.feed(&buf[..n]);
+        match port.read(&mut buf) {
+            Ok(n) if n > 0 => responder.feed(&buf[..n]),
+            // A closed peer can return immediately on macOS. Avoid spinning
+            // a whole CPU while the daemon releases/reopens the slave.
+            _ => std::thread::sleep(Duration::from_millis(1)),
         }
         let out = responder.due();
         if !out.is_empty() {
             let _ = port.write_all(&out);
-            let _ = port.flush();
+            // This FD is unbuffered. tcdrain (TTYPort::flush) may wait without
+            // a usable timeout when the client closes or stops reading; it must
+            // not block later simulated requests or fixture shutdown.
         }
     }
 }
