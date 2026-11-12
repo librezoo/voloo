@@ -2,7 +2,10 @@
 'use strict';
 (() => {
 const messages = {
-  "Invalid device state response": ["设备状态响应无效", "裝置狀態回應無效"],
+  "Invalid device state response": [
+    "设备状态响应无效",
+    "裝置狀態回應無效"
+  ],
   "Devices": [
     "设备",
     "裝置"
@@ -559,10 +562,6 @@ const messages = {
     "深色",
     "深色"
   ],
-  "Your power, under control.": [
-    "掌控每一次通断。",
-    "掌控每一次通斷。"
-  ],
   "USB-C SWITCH / LOCAL CONTROL": [
     "USB-C 开关 / 本机控制",
     "USB-C 開關 / 本機控制"
@@ -730,6 +729,14 @@ const messages = {
   "Logs could not be written. Check free space and permissions of the Voloo home directory.": [
     "无法写入日志。请检查 Voloo 数据目录的剩余空间和权限。",
     "無法寫入日誌。請檢查 Voloo 資料目錄的剩餘空間和權限。"
+  ],
+  "Voloo doesn’t make power.": [
+    "Voloo 不生产电，",
+    "Voloo 不生產電，"
+  ],
+  "It puts you in control.": [
+    "只让电听你指挥。",
+    "只讓電聽你指揮。"
   ]
 };
 function matchLanguage(value) {

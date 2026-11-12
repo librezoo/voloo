@@ -454,7 +454,7 @@ function makeSheet(uid) {
   const lockDesc = h('span', { class: 'desc' });
   const faultsTitle = h('div', { class: 'group-title' }, micro(tr('Needs attention')));
   const faultsGroup = h('div', { class: 'group' });
-  const info = h('div', { class: 'group' });
+  const info = h('div', { class: 'group device-info' });
   const recentTitle = h('div', { class: 'group-title' }, micro(tr('Recent activity')));
   const recent = h('div', { class: 'group' });
 
@@ -595,7 +595,9 @@ function makeSheet(uid) {
 }
 
 function drawChart(box, uid, hoverX) {
-  const W = 540, H = 170, PL = 40, PR = 46, PT = 6, PB = 22;
+  // Keep chart labels at their intended size on narrow detail sheets. A fixed
+  // 540-wide viewBox shrinks the plot into the middle of a tall SVG on phones.
+  const W = Math.max(240, box.clientWidth - 8), H = 170, PL = 40, PR = 46, PT = 6, PB = 22;
   const IW = W - PL - PR;
   const g = scopeGeometry(uid, IW, H, PT, PB);
   const top = g.max / 1.12;

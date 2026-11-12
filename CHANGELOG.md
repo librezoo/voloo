@@ -14,6 +14,12 @@ All notable changes to this project are documented here. Versions follow
 
 ### Fixed
 
+- Keep narrow-screen navigation labels on one line, size the voltage chart to the
+  detail sheet, align device information and copy controls on phones, and keep the
+  detail header and close button visible while scrolling.
+- Set the dashboard headline in two readable lines with natural Simplified Chinese,
+  Traditional Chinese and English wording about controlling externally supplied power.
+
 - Cancel power holds on focus loss, hidden pages, removed controls and state changes;
   block actions while disconnected or waiting for an explicit read after an unknown result.
 - Clear completed operations from other browser pages, update nicknames immediately,
