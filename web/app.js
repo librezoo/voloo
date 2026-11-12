@@ -260,7 +260,8 @@ const holdHint = (d) => (d && d.status && d.status.output_enabled ? tr('Hold to 
 
 const firmwareActive = (d) => !!d?.firmware && !['completed', 'failed', 'rolled_back'].includes(d.firmware.stage);
 const firmwareReady = (d) => canAct(d) && isFullyOff(d) && d.status.vin_valid && d.status.vout_valid && Number.isFinite(d.status.vout_mv) && d.status.vout_mv <= 1000;
-const firmwareStage = (stage) => tr({ checking: 'Checking firmware', entering_update_mode: 'Entering update mode', installing_ab: 'Installing A/B support', uploading: 'Uploading firmware', reconnecting: 'Reconnecting', verifying: 'Verifying firmware', confirming: 'Confirming firmware', waiting_for_rollback: 'Waiting for automatic rollback', rolled_back: 'Previous firmware restored', completed: 'Firmware verified', failed: 'Firmware maintenance failed' }[stage] || 'Working');
+const firmwareOnlineReady = (d) => !!(d?.identity?.capabilities & 0x1000) && state.firmwareBoot.get(d.uid)?.encrypted === true && state.firmwareBoot.get(d.uid)?.protection_flags === 14;
+const firmwareStage = (stage) => tr({ checking: 'Checking firmware', downloading: 'Downloading encrypted firmware', entering_update_mode: 'Entering update mode', installing_ab: 'Installing A/B support', uploading: 'Uploading firmware', reconnecting: 'Reconnecting', verifying: 'Verifying firmware', confirming: 'Confirming firmware', waiting_for_rollback: 'Waiting for automatic rollback', rolled_back: 'Previous firmware restored', completed: 'Firmware verified', failed: 'Firmware maintenance failed' }[stage] || 'Working');
 const firmwareVersion = (n) => Number.isInteger(n) ? `${n >> 8}.${n & 255}` : '—';
 async function refreshFirmware(uid) {
   try { const r = await api('GET', `/v1/devices/${enc(uid)}/firmware`); state.firmwareBoot.set(uid, r.ab); render(); }
@@ -271,10 +272,14 @@ async function updateFirmware(d, rollback = false) {
   let body = {};
   if (!rollback) {
     const file = state.firmwareFiles.get(d.uid);
-    if (!file || file.size > 512 * 1024 || !file.size) return;
-    const data = Array.from(new Uint8Array(await file.arrayBuffer()));
-    if (state.firmwareFiles.get(d.uid) !== file || !firmwareReady(state.devices.get(d.uid))) return;
-    body = { data };
+    if (!file) {
+      if (!firmwareOnlineReady(d)) return;
+    } else {
+      if (file.size > 512 * 1024 || !file.size) return;
+      const data = Array.from(new Uint8Array(await file.arrayBuffer()));
+      if (state.firmwareFiles.get(d.uid) !== file || !firmwareReady(state.devices.get(d.uid))) return;
+      body = { data };
+    }
   }
   await act(d, rollback ? 'firmware_rollback' : 'firmware_update', 'POST', `/v1/devices/${enc(d.uid)}/firmware${rollback ? '/rollback' : ''}`, body);
   refreshFirmware(d.uid);
@@ -648,20 +653,20 @@ function makeSheet(uid) {
       row(tr('Hardware'), id.hardware_version || '—'),
       row(tr('Round trip'), p50 ? `${p50} ms p50 · ${(m.status_p99_us / 1000).toFixed(2)} ms p99` : '—')]);
 
-    const supported = !!(id.capabilities & 0x0c00);
+    const supported = !!(id.capabilities & 0x1c00);
     const file = state.firmwareFiles.get(uid);
     if (!file) firmwareFile.value = '';
     const boot = state.firmwareBoot.get(uid);
     const previous = boot?.previous_slot == null ? null : boot.versions?.[boot.previous_slot];
     firmwareFile.disabled = firmwareChoose.disabled = !can || !supported;
-    firmwareStart.disabled = !firmwareReady(d) || !supported || !file;
-    firmwareRollback.disabled = !firmwareReady(d) || !(id.capabilities & 0x0800) || previous == null;
-    firmwareRollback.hidden = !(id.capabilities & 0x0800);
+    firmwareStart.disabled = !firmwareReady(d) || !supported || (!file && !firmwareOnlineReady(d));
+    firmwareRollback.disabled = !firmwareReady(d) || !(id.capabilities & 0x1800) || previous == null;
+    firmwareRollback.hidden = !(id.capabilities & 0x1800);
     firmwareTarget.hidden = !file;
-    firmwarePrevious.hidden = !d.firmware || firmwareActive(d) || !(id.capabilities & 0x0800);
+    firmwarePrevious.hidden = !d.firmware || firmwareActive(d) || !(id.capabilities & 0x1800);
     firmwarePrevious.textContent = !state.firmwareBoot.has(uid) ? tr('Checking firmware') : previous != null ? `${tr('Previous firmware')}: ${firmwareVersion(previous)}` : tr('No previous firmware is available.');
     firmwareTarget.textContent = file ? `${file.name} · ${firmwareVersion(state.firmwareMeta.get(uid))}` : tr('Choose a local firmware file');
-    firmwareNote.textContent = !supported ? tr('This firmware does not support USB updates.') : !isFullyOff(d) || !s.vout_valid || s.vout_mv > 1000 ? tr('Switch off and confirm VOUT ≤ 1 V before updating.') : !(id.capabilities & 0x0800) && file?.name.endsWith('.voloofw') ? tr('First A/B installation replaces the boot program. Keep USB connected.') : tr('The background service reconnects and verifies the device. Output stays off.');
+    firmwareNote.textContent = !supported ? tr('This firmware does not support USB updates.') : !isFullyOff(d) || !s.vout_valid || s.vout_mv > 1000 ? tr('Switch off and confirm VOUT ≤ 1 V before updating.') : !file && !firmwareOnlineReady(d) ? tr('Online updates require trusted factory initialization and device protection.') : !(id.capabilities & 0x1800) && file?.name.endsWith('.voloofw') ? tr('First A/B installation replaces the boot program. Keep USB connected.') : !file && (id.capabilities & 0x1000) ? tr('Compatible encrypted firmware is downloaded temporarily, verified on the device, then removed.') : tr('The background service reconnects and verifies the device. Output stays off.');
     firmwareProgress.hidden = !d.firmware;
     firmwareProgress.value = d.firmware?.percent || 0;
     firmwareState.textContent = d.firmware ? `${firmwareStage(d.firmware.stage)} · ${d.firmware.percent}%` : previous != null ? `${tr('Previous firmware')}: ${firmwareVersion(previous)}` : tr('No previous firmware is available.');

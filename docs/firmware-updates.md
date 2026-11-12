@@ -1,123 +1,168 @@
 # USB firmware updates and A/B rollback
 
-These are local, unreleased CLI/dashboard changes. The connected X035 USB test
-board is running A/B firmware 2.9; the npm release has not been republished.
+Version 0.7.0-rc.3 supports automatic encrypted USB updates for factory-initialized
+CH32X035 USB boards running secure firmware 3.0. The firmware source and factory
+keys are private. npm contains the host program, not plaintext firmware or keys.
 
 ## Update or roll back
 
-Use a trusted local firmware file. Replace `DEV` with the complete UID or a unique
-nickname; writes always require an explicit device.
+Replace `DEV` with the complete UID or a unique nickname. Writes always require an
+explicit device.
 
 ```sh
 voloo firmware status DEV
+voloo firmware update DEV                  # download the release paired with this CLI
 voloo firmware update DEV /path/to/firmware.voloofw
 voloo firmware rollback DEV
+voloo firmware inspect /path/to/firmware.voloofw  # offline structural inspection
 ```
 
-In `voloo ui`, open the device details, select a file under **USB firmware**, and
-hold **Update firmware** to confirm. **Roll back firmware** starts the previous
-confirmed image when one is available. The page shows upload, reconnection,
-verification, confirmation and rollback results. English, Simplified Chinese and
-Traditional Chinese are supported.
+In `voloo ui`, open the device details under **USB firmware** and hold **Update
+firmware**. No file selection is needed for online updating. An optional local
+file can be selected for offline updating. **Roll back firmware** starts the
+previous confirmed image when available. The page shows download, upload,
+reconnection, verification, confirmation and rollback results in English,
+Simplified Chinese or Traditional Chinese.
 
 The device must be idle OFF, with valid VIN/VOUT and VOUT <= 1 V. Updating never
-switches off, discharges or restores an earlier ON for you. If needed, explicitly
-turn off/discharge first. Configuration/runtime locks still refuse firmware changes.
+switches off, discharges or restores an earlier ON for you. Configuration/runtime
+locks still refuse firmware changes.
 
-**Do not stop the daemon.** Its device worker owns the whole maintenance operation,
-including releasing the exclusive serial handle when needed and reacquiring the
-same UID after USB re-enumeration. Scanning/polling and new jobs for this device
-are suspended; other devices and the local HTTP/SSE service remain available.
-The CLI's firmware commands therefore use managed mode, not `--direct/--port`.
-A third-party serial application still needs to release its own handle.
+**Do not stop the daemon.** Its device worker owns maintenance, releases the
+exclusive serial handle when needed, and reacquires the same UID after USB
+re-enumeration. Polling and new jobs for that device are suspended; other devices
+and HTTP/SSE remain available. Firmware commands use managed mode, not
+`--direct/--port`. A third-party serial application must release its own handle.
 
 The daemon finishes an accepted operation even if the CLI or browser disconnects.
-It never repeats a modifying command because its acknowledgement was lost. It
-reads the transfer offset or boot state to establish the result, or reports an
-unknown outcome. Check fresh state before another action after an unknown result.
+It does not repeat a modifying command after a lost acknowledgement. It reads the
+transfer offset or boot state to establish the result, or reports an unknown
+outcome. Check fresh state before another action after an unknown result.
 
-## What is verified
+## Download and cleanup
 
-A `.voloofw` package identifies the X035 hardware, version and separately linked
-A/B images. The host rejects a wrong target, slot, size or inconsistent factory
-image before starting maintenance. Ordinary A/B updates write only the inactive
-slot. The device verifies each programmed block and the existing CRC16 before
-staging it; the current confirmed image stays intact.
+The host downloads only this public release's paired encrypted asset:
+`https://github.com/librezoo/voloo/releases/download/v<CLI-version>/voloo-switch-x035.voloofw`.
+Updating the npm app selects its paired firmware; this command does not search
+arbitrary newer releases. HTTPS, a 30-second request timeout and a 512 KiB limit
+apply. A plaintext download is refused.
 
-The new image boots provisionally. The host reads back the same UID, hardware,
-expected package version, nickname and idle OFF/measurement state, then sends one
-confirmation. Only a committed confirmation makes it current. Flash erase and USB
-startup can briefly invalidate measurements; the host waits read-only for a fresh
-valid group rather than bypassing the device's checks.
+Only ciphertext is staged in a unique directory under the operating system's
+temporary directory (`TMPDIR` on macOS, normally `/tmp` on Linux, the user temp
+directory on Windows). On Unix the directory is owner-only. It is kept until
+verification or rollback finishes, then the file and directory are removed on
+success or handled failure, including interrupted/truncated downloads. There is
+no persistent firmware cache. Forced process termination or OS power loss can
+leave ciphertext in the temporary directory; file deletion is not secure erasure.
 
-A hanging trial is reset by the independent watchdog. A running trial without host
-confirmation resets after 15 seconds. The boot program then selects the previously
-confirmed image. The host reconnects and verifies that image and OFF state, reports
-`rolled_back`, and exits 2 because the requested upgrade did not succeed. An
-explicit rollback is also trial-booted and verified before it is confirmed.
+Online updates first require device-reported read protection plus boot/key write
+protection (`ab.encrypted: true`, `ab.protection_flags: 14`). They refuse devices
+whose factory security initialization is incomplete before downloading anything.
+The encrypted asset must contain a ticket for the device UID.
 
-The previous image occupies the inactive slot until the next upload. Starting a
-new upload overwrites that previous image; an interrupted upload preserves the
-current confirmed application but can leave no separate rollback image until a
-later successful upgrade.
+## Device authentication and confidentiality
 
-## Legacy firmware and first installation
+Secure packages use standard XChaCha20-Poly1305 (Monocypher 4.0.3 on the MCU,
+interoperability tested against libsodium). Each device has an independent random
+256-bit root key provisioned by the trusted factory. Each package uses a fresh
+random content key, wrapped separately for each enrolled device. The host never
+receives a plaintext key or application.
 
-Firmware 2.8 uses software entry into WCH USB ROM ISP and requires `wchisp` on the
-host PATH (or `VOLOO_WCHISP`). The worker releases the CDC handle, verifies that
-exactly one matching chip/UID is in ROM ISP, programs with the configuration-safe
-erase bound, verifies, reconnects and checks the application. No manual pad short
-or daemon stop is needed when the running device supports this entry.
+The device authenticates the UID-bound ticket before invalidating the inactive
+slot. Each encrypted chunk binds the package header, slot, offset and length;
+it is authenticated before decryption/programming. The complete image is read
+back and checked with the existing CRC16. A root-key authentication tag also binds
+the stored application, slot, version and length, and is checked by the boot
+program before execution. CRC16 alone is not source authentication. Offline
+`firmware inspect` checks structure and rejects private/plaintext fields; only an
+enrolled device can authenticate the ciphertext.
 
-A/B packages include the first-install image, so the same command can migrate 2.8
-to the new boot program and dual-slot layout. This initial layout migration cannot
-keep the old address-0 2.8 application as an A/B fallback. **Power loss that damages
-the boot program during this first migration can still require ROM pads or
-WCH-Link recovery.** Normal subsequent A/B updates do not write the boot program.
+Chip read protection blocks normal external Flash readout. Write protection
+covers the boot program and device key at offsets `0x0000..0x1FFF`; normal updates
+write the inactive application slot and boot metadata. Calibration and nickname
+pages remain writable. Protection is a separate trusted factory operation, not
+an npm command. Removing read protection later mass-erases user Flash, including
+keys and board configuration; it is not a reversible debug toggle.
 
-A/B firmware uses native CDC updating and does not need `wchisp`. It rejects raw
-single-image BIN files. Legacy USB-updatable `.bin` files remain supported on 2.8,
-but have no A/B protection and encode no expected version: their result reports the
-actual read-back version, with `expected_version_verified: false`.
+This raises the cost of firmware extraction; it cannot guarantee that hardware
+fault injection, invasive attacks or a future application vulnerability will
+never expose code or a key. The implementation has not had an independent
+security audit. Deleting a temporary download does not itself prevent reversing.
+A/B rollback deliberately permits an authenticated previous version; this is not
+an anti-downgrade policy.
 
-Package target identifiers and CRC16 are not firmware-source authentication. Use
-trusted local files. Firmware/host publishing and other-platform qualification are
-outside this local change.
+## Trial boot and recovery
+
+Normal updates write only the inactive slot. The confirmed application stays
+intact. The new image boots provisionally; the host verifies the same UID,
+hardware, package version, nickname, idle OFF state and valid measurements before
+sending one confirmation. Only committed confirmation makes it current.
+
+A hanging trial resets through the independent watchdog. A running trial without
+host confirmation resets after 15 seconds. The boot program then selects the
+previous confirmed application. The host verifies that image and OFF, reports
+`rolled_back`, and exits 2 because the requested upgrade failed. Explicit rollback
+also trial-boots and verifies the previous image before confirmation.
+
+A new upload overwrites the previous-image slot. Interrupted upload preserves
+the current confirmed application but can leave no separate rollback image until
+a later successful upgrade. Corrupt boot/key storage or damage during initial
+factory provisioning is outside application A/B recovery.
+
+## Legacy devices and factory initialization
+
+Legacy 2.8 and plaintext A/B 2.9 local files remain supported by the host, with
+existing safety checks. 2.8 ROM ISP updating needs `wchisp`; plaintext A/B uses
+native CDC. They cannot install the sealed public package by themselves. No
+plaintext first-install image, production key or factory vault is publicly
+provided. Transitioning an existing uninitialized board to secure 3.0 requires
+one trusted provisioning operation with private factory tools and preserved
+per-device configuration. Subsequent ordinary updates use USB without pad shorts.
+
+The initial boot-layout migration has no old-layout fallback. Power loss during
+that first migration can require physical recovery. Once read protection is
+active, recovery that removes it erases configuration and device credentials and
+requires trusted reprovisioning. Do not use generic erase/unprotect commands as
+an upgrade procedure.
 
 ## Local API
 
-The existing loopback/Host/origin checks, bearer/browser-session authentication,
-locks and operation logging apply unchanged.
+Existing loopback/Host/origin checks, authentication, locks and operation logging
+apply to firmware operations.
 
 | Endpoint | Meaning |
 | --- | --- |
-| `GET /v1/devices/{id}/firmware` | Fresh USB support and A/B boot state |
-| `POST /v1/devices/{id}/firmware` with `{"data":[byte,...]}` | Update from local file bytes, up to 512 KiB |
+| `GET /v1/devices/{id}/firmware` | Fresh USB support and boot/protection state |
+| `POST /v1/devices/{id}/firmware` with `{}` | Download paired encrypted firmware, update and remove temporary file |
+| Same POST with `{"data":[byte,...]}` | Update from a local file, up to 512 KiB |
 | `POST /v1/devices/{id}/firmware/rollback` | Verify and confirm the previous image |
-| `GET /v1/devices` / SSE `firmware.progress` | Maintenance progress without opening another serial transaction |
+| Device snapshots / SSE `firmware.progress` | Maintenance progress |
 
-Other device jobs return Busy during maintenance; they are not queued across a
-reset. Completed operations and failures are fsynced into the existing journal.
+Other jobs for the target return Busy during maintenance. They are not queued
+across a reset. Results and failures are fsynced into the existing journal.
 
 ## Evidence and limits
 
-The host tests run only against simulations/PTYs: same-process maintenance,
-concurrent-job refusal, another device remaining available, lost BEGIN/WRITE/END/
-confirmation acknowledgements without repeats, failed upload cleanup, failed trial
-rollback, valid-measurement settling, firmware type/size checks and UI guards.
+Host tests cover simulated device/PTY maintenance, concurrent-job refusal, other
+devices remaining available, lost acknowledgements without modifying retries,
+failed transfer cleanup, failed-trial rollback and valid-measurement settling.
+Encrypted download tests cover success/failure cleanup, truncation, read errors,
+oversized/plaintext downloads, and pairing with the CLI version. UI tests cover
+protection initialization and OFF/lock/voltage requirements.
 
-One real X035 USB board (`CD-AB-75-F3-69-BE-AB-5D`) has exercised migration from
-2.8, inactive-slot updating, explicit rollback and a deliberately non-booting trial
-that the watchdog rolled back to the confirmed 2.9. The daemon PID stayed unchanged
-across device updates. The real dashboard upgraded 2.9 to 2.10 and rolled back
-to 2.9, and showed a healthy but version-mismatched trial waiting for automatic
-rollback without enabling power controls. A prototype watchdog initialization error was found on the
-first migration, recovered from the exact full-flash backup, corrected from WCH's
-X035 example and regression-tested before the successful retest.
+Independent libsodium/MCU C tests cover encrypted ticket/chunk interoperability,
+wrong UID, tampering before erase/staging, stored-image authentication, trial
+rollback and preservation of unrelated protection options.
 
-Raw backups and evidence are under the workspace's outer
-`output/voloo-integrated-updates-20261112/`; they are not committed. Firmware C tests
-simulate power cuts at metadata erase/program word boundaries; this is not a
-physical power-disconnection qualification. Load protection, physical 30.5 V trip
-accuracy/latency, flash endurance and other hardware revisions are not qualified by
-these update tests.
+One real USB board (`CD-AB-75-F3-69-BE-AB-5D`) has exercised encrypted 3.0 uploads,
+explicit rollback, bad-ticket/bad-chunk refusal and an authenticated but
+non-booting candidate returning to the confirmed image through the watchdog.
+These tests ran with debug/read protection still disabled; enabling the
+protection options and online release downloading are separate remaining checks.
+Earlier plaintext A/B tests also covered 2.8 migration and the real dashboard.
+
+Evidence is kept outside the repository in workspace `output/` directories;
+private key-containing backups stay in the private factory directory. Simulated
+metadata power cuts are not physical power-disconnection qualification. These
+update tests do not qualify Flash endurance, loaded switching, physical 30.5 V
+trip accuracy/latency or other board revisions.
