@@ -1071,8 +1071,9 @@ fn firmware_failed_trial_rolls_back_and_failed_upload_releases_maintenance() {
         result["error"]["details"]["update"]["outcome"],
         "rolled_back"
     );
-    let (_, status) = rig.run(&["status", UID_A]);
-    assert_eq!(status["power_state"], "OFF");
+    let (status_code, status) = rig.run(&["status", UID_A]);
+    assert_eq!(status_code, 0, "post-rollback status: {status}");
+    assert_eq!(status["power_state"], "OFF", "{status}");
     {
         let mut state = rig.sims[0].state.lock().unwrap();
         state.inject.fail_firmware_trial = false;

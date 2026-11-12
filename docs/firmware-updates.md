@@ -159,7 +159,10 @@ explicit rollback, bad-ticket/bad-chunk refusal and an authenticated but
 non-booting candidate returning to the confirmed image through the watchdog.
 After explicit approval, read/boot/key protection was enabled and read back as
 flags 14; encrypted updating and explicit rollback passed again with protection
-active. Online release downloading is a separate remaining check.
+active, followed by a USB-only cold boot. A read-only WCH-Link check did not recover
+the provisioned boot/key bytes; attaching the debugger interrupted execution and
+required disconnecting it and power-cycling USB. Leave the debugger disconnected
+for normal use. Online release downloading is a separate remaining check.
 Earlier plaintext A/B tests also covered 2.8 migration and the real dashboard.
 
 Evidence is kept outside the repository in workspace `output/` directories;
