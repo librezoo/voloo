@@ -1,6 +1,6 @@
 # USB firmware updates and A/B rollback
 
-Version 0.7.0-rc.4 supports automatic encrypted USB updates for factory-initialized
+Version 0.7.0-rc.5 supports automatic encrypted USB updates for factory-initialized
 CH32X035 USB boards running secure firmware 3.0. The firmware source and factory
 keys are private. npm contains the host program, not plaintext firmware or keys.
 
