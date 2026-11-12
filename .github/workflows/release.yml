@@ -50,6 +50,12 @@ jobs:
         run: |
           gh release upload "$GITHUB_REF_NAME" --clobber dist/npm/*.tgz dist/pypi/*.whl
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false
+          # Check the unauthenticated URL used by installed clients before npm
+          # users receive this version. Draft asset access alone is insufficient.
+          curl --fail --location --proto '=https' --proto-redir '=https' --max-time 30 --retry 3 \
+            --output dist/firmware/public.voloofw \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/voloo-switch-x035.voloofw"
+          dist/firmware-client/package/bin/voloo --json firmware inspect dist/firmware/public.voloofw
       - name: Publish platform packages, then the main package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

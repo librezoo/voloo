@@ -1168,6 +1168,11 @@ mod download_tests {
             assert!(Downloaded::stage(&bytes[..], temp.path(), name).is_err());
             assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
         }
+        let mut mixed: Value = serde_json::from_slice(&encrypted_file()).unwrap();
+        mixed["factory"] = json!([0, 1, 2]);
+        let bytes = serde_json::to_vec(&mixed).unwrap();
+        assert!(Downloaded::stage(&bytes[..], temp.path(), "mixed-plaintext").is_err());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
         struct Broken(bool);
         impl Read for Broken {
             fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
