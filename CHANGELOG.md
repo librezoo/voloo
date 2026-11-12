@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Versions follow
 
 ## Unreleased
 
+### Fixed
+
+- Publish the main npm package as `@librezoo/voloo`: npm rejects the unscoped name
+  `voloo` as too similar to an existing package. The installed command stays `voloo`.
+- Resume partial npm releases by skipping package versions already in the registry.
+
 ## 0.7.0-rc.1 - 2026-11-04
 
 The host is rebuilt for the USB-C Voloo Switch (PC → USB → Switch, no Core).

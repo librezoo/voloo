@@ -25,7 +25,7 @@ check() { # $1 = label, $2 = voloo command
 
 echo "## npm (isolated prefix)"
 mkdir -p "$WORK/npm" && cd "$WORK/npm" && npm init -y >/dev/null
-npm install --omit=optional --no-audit --no-fund "$ROOT"/dist/npm/librezoo-voloo-*.tgz "$ROOT"/dist/npm/voloo-[0-9]*.tgz >/dev/null
+npm install --omit=optional --no-audit --no-fund "$ROOT"/dist/npm/librezoo-voloo-*.tgz >/dev/null
 check npm "$WORK/npm/node_modules/.bin/voloo"
 
 echo "## pip (fresh virtualenv)"

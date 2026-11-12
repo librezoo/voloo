@@ -51,6 +51,7 @@ jobs:
         run: |
           cargo fmt --check
           cargo clippy --locked --all-targets -- -D warnings
+          node --test packaging/npm/publish.test.mjs
       - name: Tests (simulated devices only)
         # One test at a time: every test drives simulated serial ports with real timing (150 ms
         # reply budget), and parallel tests starve each other on 4-core runners.

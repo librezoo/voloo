@@ -21,7 +21,7 @@ No driver is needed on macOS 11+, Linux or Windows 10/11.
 
 | With | Command |
 | --- | --- |
-| npm (Node 18+) | `npm install -g voloo` — or run without installing: `npx voloo ls` |
+| npm (Node 18+) | `npm install -g @librezoo/voloo` — or run without installing: `npx @librezoo/voloo ls` |
 | pip / pipx / uv | `pipx install voloo` — or `uvx voloo ls` |
 | A downloaded binary | put `voloo` (`voloo.exe`) on your `PATH` |
 
@@ -81,7 +81,7 @@ command, `voloo mcp`:
 | Gemini CLI | `~/.gemini/settings.json`: `{"mcpServers": {"voloo": {"command": "voloo", "args": ["mcp"]}}}` |
 | Windsurf, Cline, Zed, others | the same `command` / `args` pair in their MCP settings |
 
-Without a global install, use `npx -y voloo mcp` or `uvx voloo mcp` as the command.
+Without a global install, use `npx -y @librezoo/voloo mcp` or `uvx voloo mcp` as the command.
 
 The agent gets five tools: `voloo_list_devices`, `voloo_get_status`, `voloo_power`
 (`on`, `off`, `discharge`, `cycle`), `voloo_set_nickname` and `voloo_get_log`. To let
@@ -216,7 +216,7 @@ check it, then attach it to your message.
 ## 8. Building the packages (maintainers)
 
 ```sh
-node packaging/npm/build.mjs                      # dist/npm: voloo + @librezoo/voloo-<platform>
+node packaging/npm/build.mjs                      # dist/npm: @librezoo/voloo + @librezoo/voloo-<platform>
 (cd packaging/pypi && uvx maturin==1.15.0 build --release --out ../../dist/pypi)
 sh packaging/check-install.sh                     # installs both into throw-away places and runs them
 ```

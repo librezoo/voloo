@@ -44,7 +44,7 @@ chmodSync(join(mainDir, 'bin', 'voloo.js'), 0o755);
 copyFileSync(join(root, 'README.md'), join(mainDir, 'README.md'));
 copyFileSync(join(root, 'LICENSE'), join(mainDir, 'LICENSE'));
 writeFileSync(join(mainDir, 'package.json'), JSON.stringify({
-  name: 'voloo', ...common,
+  name: '@librezoo/voloo', ...common,
   bin: { voloo: 'bin/voloo.js' },
   files: ['bin', 'README.md'],
   engines: { node: '>=18' },

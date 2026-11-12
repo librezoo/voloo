@@ -34,14 +34,12 @@ jobs:
           test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version"; exit 1; }
           echo "VERSION=$version" >> "$GITHUB_ENV"
           ls -l dist/npm dist/pypi
-          test "$(ls dist/npm/librezoo-voloo-*.tgz | wc -l)" = 5
+          test "$(ls dist/npm/librezoo-voloo-*.tgz | wc -l)" = 6
       - name: Publish platform packages, then the main package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          tag=latest; case "$VERSION" in *-*) tag=next;; esac
-          for f in dist/npm/librezoo-voloo-*.tgz; do npm publish "$f" --access public --tag "$tag"; done
-          npm publish "dist/npm/voloo-$VERSION.tgz" --access public --tag "$tag"
+          node packaging/npm/publish.mjs "$VERSION"
       - name: GitHub release with all packages
         env:
           GH_TOKEN: ${{ github.token }}

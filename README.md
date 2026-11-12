@@ -13,7 +13,7 @@ confirm VOUT ≤ 1 V.
 ## Install
 
 ```sh
-npm install -g voloo       # or: npx voloo ls
+npm install -g @librezoo/voloo # or: npx @librezoo/voloo ls
 pipx install voloo         # or: uvx voloo ls
 ```
 

@@ -14,7 +14,7 @@ try {
   exe = path.join(dir, 'bin', process.platform === 'win32' ? 'voloo.exe' : 'voloo');
 } catch {
   console.error(`voloo: no native build is installed for ${target}.\n` +
-    `Reinstall with optional dependencies enabled (npm install voloo), or download a binary for your platform.`);
+    `Reinstall with optional dependencies enabled (npm install @librezoo/voloo), or download a binary for your platform.`);
   process.exit(4);
 }
 const result = spawnSync(exe, process.argv.slice(2), { stdio: 'inherit', windowsHide: true });
