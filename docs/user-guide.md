@@ -217,6 +217,23 @@ versions, device states and registers, recent faults and logs, and your settings
 contains no token, host name or user name, and nothing is sent anywhere; open it to
 check it, then attach it to your message.
 
+## USB firmware maintenance (local unreleased feature)
+
+Open a device's details in the dashboard and use **USB firmware**, or run:
+
+```sh
+voloo firmware status DEV
+voloo firmware update DEV /path/to/firmware.voloofw
+voloo firmware rollback DEV
+```
+
+The background process handles port ownership and reconnection automatically.
+The output must already be OFF with valid readings and VOUT <= 1 V; locks still
+apply, and the old ON state is never resumed. A/B trials are confirmed only after
+identity, version, nickname and state verification; failed trials restore the
+previous confirmed image. First migration from the old layout has different
+recovery limits. Read [firmware updates](firmware-updates.md) before migrating.
+
 ## 8. Building the packages (maintainers)
 
 ```sh
