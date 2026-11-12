@@ -28,6 +28,7 @@ pub const NICKNAME_MAX_BYTES: usize = 24;
 pub const CAP_NICKNAME: u16 = 0x0020;
 pub const CAP_USB_ISP: u16 = 0x0400;
 pub const CAP_AB_UPDATE: u16 = 0x0800;
+pub const CAP_SEALED: u16 = 0x1000;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ProtocolError {
@@ -140,13 +141,13 @@ impl Command {
 pub enum Expect {
     Registers { fc: u8, count: u16 },
     Echo { fc: u8, frame: Vec<u8> },
-    Firmware { action: u8 },
+    Firmware { fc: u8, action: u8 },
 }
 impl Expect {
     pub fn fc(&self) -> u8 {
         match self {
             Expect::Registers { fc, .. } | Expect::Echo { fc, .. } => *fc,
-            Expect::Firmware { .. } => 0x49,
+            Expect::Firmware { fc, .. } => *fc,
         }
     }
 }
@@ -161,15 +162,23 @@ pub struct Request {
 }
 
 pub fn firmware_request(uid: Uid, action: u8, payload: &[u8]) -> Result<Request, ProtocolError> {
-    if action > 7 || payload.len() > 242 {
+    firmware_request_on(uid, 0x49, action, payload)
+}
+pub fn firmware_request_on(
+    uid: Uid,
+    fc: u8,
+    action: u8,
+    payload: &[u8],
+) -> Result<Request, ProtocolError> {
+    if !matches!(fc, 0x49 | 0x4a) || action > 7 || payload.len() > 242 {
         return Err(ProtocolError::Malformed("invalid firmware request"));
     }
     let mut data = vec![action, payload.len() as u8];
     data.extend_from_slice(payload);
     Ok(Request {
         uid,
-        frame: addressed(0x49, uid, &data),
-        expect: Expect::Firmware { action },
+        frame: addressed(fc, uid, &data),
+        expect: Expect::Firmware { fc, action },
         label: format!("firmware action {action}"),
     })
 }
@@ -340,9 +349,9 @@ impl FrameDecoder {
                 break;
             }
             let length = match self.buffer[1] {
-                0x83 | 0x84 | 0x86 | 0x90 | 0xC8 | 0xC9 => 13,
+                0x83 | 0x84 | 0x86 | 0x90 | 0xC8 | 0xC9 | 0xCA => 13,
                 FC_WRITE_SINGLE | FC_WRITE_MULTIPLE | 0x48 => 16,
-                0x49 => {
+                0x49 | 0x4A => {
                     if self.buffer.len() < 12 {
                         break;
                     }
@@ -426,7 +435,7 @@ pub fn match_reply(uid: Uid, expect: &Expect, frame: &[u8]) -> Option<Matched> {
             ))
         }
         Expect::Echo { frame: echo, .. } => (frame == echo.as_slice()).then_some(Matched::Echo),
-        Expect::Firmware { action } => {
+        Expect::Firmware { action, .. } => {
             (frame.len() == 46 && frame[10] == *action && frame[11] == 32)
                 .then(|| Matched::Firmware(frame[12..44].to_vec()))
         }

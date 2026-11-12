@@ -142,10 +142,12 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum FirmwareCmd {
-    /// Upload a local .voloofw package (or legacy USB .bin); verify and confirm it.
+    /// Inspect a distributable firmware package offline; never opens a device.
+    Inspect { file: std::path::PathBuf },
+    /// Download paired encrypted firmware automatically, or use a local FILE; verify and confirm.
     Update {
         device: String,
-        file: std::path::PathBuf,
+        file: Option<std::path::PathBuf>,
     },
     /// Trial-boot the previous A/B firmware; verify it before confirming rollback.
     Rollback { device: String },
@@ -422,6 +424,20 @@ fn fault_lines(faults: &Value) -> String {
 fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
     match cmd {
         Cmd::Firmware { action } => {
+            if let FirmwareCmd::Inspect { file } = action {
+                use std::io::Read;
+                let mut data = Vec::new();
+                std::fs::File::open(file)
+                    .map_err(|e| OpError::new(ErrorKind::InvalidArgument, e.to_string()))?
+                    .take(voloo::firmware::MAX_FILE as u64 + 1)
+                    .read_to_end(&mut data)
+                    .map_err(|e| OpError::new(ErrorKind::InvalidArgument, e.to_string()))?;
+                let value = voloo::firmware::inspect(&data)?;
+                emit(ctx, &value, || {
+                    serde_json::to_string_pretty(&value).unwrap()
+                });
+                return Ok(0);
+            }
             if matches!(ctx.backend, Backend::Direct { .. }) {
                 return Err(OpError::new(
                     ErrorKind::InvalidArgument,
@@ -430,9 +446,14 @@ fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
             }
             let client = daemon_client()?;
             let (device, method, suffix, body) = match action {
+                FirmwareCmd::Inspect { .. } => unreachable!(),
                 FirmwareCmd::Status { device } => (device, "GET", "", None),
                 FirmwareCmd::Rollback { device } => (device, "POST", "/rollback", Some(json!({}))),
-                FirmwareCmd::Update { device, file } => {
+                FirmwareCmd::Update { device, file: None } => (device, "POST", "", Some(json!({}))),
+                FirmwareCmd::Update {
+                    device,
+                    file: Some(file),
+                } => {
                     use std::io::Read;
                     let source = std::fs::File::open(&file).map_err(|e| {
                         OpError::new(

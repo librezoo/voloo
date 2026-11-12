@@ -32,6 +32,7 @@ pub enum Job {
     Cycle { off_ms: u64, discharge: bool },
     Nickname(String),
     Firmware(firmware::Image),
+    FirmwareOnline,
     FirmwareRollback,
     FirmwareStatus,
 }
@@ -43,11 +44,15 @@ impl Job {
                 | Job::Cycle { .. }
                 | Job::Nickname(_)
                 | Job::Firmware(_)
+                | Job::FirmwareOnline
                 | Job::FirmwareRollback
         )
     }
     fn maintenance(&self) -> bool {
-        matches!(self, Job::Firmware(_) | Job::FirmwareRollback)
+        matches!(
+            self,
+            Job::Firmware(_) | Job::FirmwareOnline | Job::FirmwareRollback
+        )
     }
     fn action(&self) -> String {
         match self {
@@ -57,7 +62,7 @@ impl Job {
             Job::Power(c) => c.name().into(),
             Job::Cycle { .. } => "cycle".into(),
             Job::Nickname(_) => "nickname".into(),
-            Job::Firmware(_) => "firmware_update".into(),
+            Job::Firmware(_) | Job::FirmwareOnline => "firmware_update".into(),
             Job::FirmwareRollback => "firmware_rollback".into(),
             Job::FirmwareStatus => "firmware_status".into(),
         }
@@ -760,12 +765,13 @@ impl Worker {
             Job::Cycle { off_ms, discharge } => device.cycle(off_ms, discharge).map(|r| json!(r)),
             Job::Nickname(name) => device.set_nickname(&name).map(|r| json!(r)),
             Job::FirmwareStatus => firmware::status(device),
-            job @ (Job::Firmware(_) | Job::FirmwareRollback) => {
+            job @ (Job::Firmware(_) | Job::FirmwareOnline | Job::FirmwareRollback) => {
+                let online = matches!(job, Job::FirmwareOnline);
                 let image = match job {
                     Job::Firmware(image) => Some(image),
                     _ => None,
                 };
-                let result = firmware::perform(device, image, m.config.scan_usb, &mut |progress| {
+                let mut report = |progress: firmware::Progress| {
                     {
                         let mut s = self.snapshot.lock().unwrap();
                         if !progress.connected {
@@ -778,7 +784,12 @@ impl Worker {
                         "firmware.progress",
                         json!({"uid":self.uid,"firmware":progress}),
                     );
-                });
+                };
+                let result = if online {
+                    firmware::perform_online(device, m.config.scan_usb, &mut report)
+                } else {
+                    firmware::perform(device, image, m.config.scan_usb, &mut report)
+                };
                 if let Err(error) = &result {
                     let mut s = self.snapshot.lock().unwrap();
                     if !s
