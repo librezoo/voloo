@@ -909,3 +909,184 @@ fn stop_waits_for_exit_so_the_next_command_starts_a_new_process() {
     assert_eq!(code, 0, "{v}");
     let _ = run(&["daemon", "stop"]);
 }
+
+fn firmware_package(version: u16) -> Value {
+    let make = |slot: u8| {
+        let mut app = vec![0u8; 512];
+        let mut tag = b"VolooSwitch:X035:AB:1:".to_vec();
+        tag.push(slot);
+        tag.push(0);
+        app[176..176 + tag.len()].copy_from_slice(&tag);
+        app
+    };
+    let a = make(b'A');
+    let b = make(b'B');
+    let mut factory = vec![255; 58 * 1024];
+    let tag = b"VolooSwitch:X035:AB:BOOT:1\0";
+    factory[192..192 + tag.len()].copy_from_slice(tag);
+    factory[0x2000..0x2200].copy_from_slice(&a);
+    factory[0x8000..0x8200].copy_from_slice(&b);
+    json!({"format":"voloo-x035-ab-v1","hardware_version":0x300,"firmware_version":version,"slot_a":a,"slot_b":b,"factory":factory})
+}
+#[test]
+fn firmware_update_and_rollback_keep_daemon_and_other_device_available() {
+    let rig = Rig::new("", 600);
+    rig.sims[0].state.lock().unwrap().enable_ab();
+    rig.ready();
+    let pid = rig.info().unwrap().pid;
+    rig.sims[0]
+        .state
+        .lock()
+        .unwrap()
+        .inject
+        .firmware_settling_reads = 3;
+    let file = rig.home().join("firmware.voloofw");
+    std::fs::write(&file, serde_json::to_vec(&firmware_package(0x20a)).unwrap()).unwrap();
+    rig.sims[0]
+        .state
+        .lock()
+        .unwrap()
+        .inject
+        .firmware_write_delay = Some(Duration::from_millis(350));
+    let update = rig
+        .cmd(&[
+            "--json",
+            "firmware",
+            "update",
+            UID_A,
+            file.to_str().unwrap(),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let (_, devices) = rig.http("GET", "/v1/devices", None);
+        if devices
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["uid"] == UID_A && d["firmware"]["stage"] == "uploading")
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "firmware update never began: {devices}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert_eq!(
+        rig.http(
+            "POST",
+            &format!("/v1/devices/{UID_A}/power"),
+            Some(json!({"action":"on"}))
+        )
+        .0,
+        409
+    );
+    assert_eq!(
+        rig.http(
+            "PUT",
+            &format!("/v1/devices/{UID_A}/nickname"),
+            Some(json!({"nickname":"queued"}))
+        )
+        .0,
+        409
+    );
+    assert_eq!(
+        rig.http("GET", &format!("/v1/devices/{UID_B}"), None).0,
+        200
+    );
+    let out = update.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "{} {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let result: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(result["identity"]["firmware_version"], "2.10");
+    assert_eq!(result["boot"]["confirmed_slot"], 1);
+    assert_eq!(result["status"]["power_state"], "OFF");
+    assert_eq!(rig.info().unwrap().pid, pid);
+    assert!(rig.sims[0].state.lock().unwrap().writes.is_empty());
+    let (code, rolled) = rig.run(&["firmware", "rollback", UID_A]);
+    assert_eq!(code, 0, "{rolled}");
+    assert_eq!(rolled["identity"]["firmware_version"], "2.9");
+    assert_eq!(rolled["boot"]["confirmed_slot"], 0);
+    assert_eq!(
+        rig.http("GET", &format!("/v1/devices/{UID_A}"), None).0,
+        200
+    );
+}
+#[test]
+fn firmware_ack_loss_uses_evidence_without_repeating_mutations() {
+    let rig = Rig::new("", 600);
+    rig.sims[0].state.lock().unwrap().enable_ab();
+    rig.ready();
+    for (i, action) in [1, 2, 3, 7].into_iter().enumerate() {
+        let before = rig.sims[0]
+            .state
+            .lock()
+            .unwrap()
+            .firmware
+            .as_ref()
+            .unwrap()
+            .actions
+            .len();
+        rig.sims[0].state.lock().unwrap().inject.drop_update_ack = Some(action);
+        let bytes = serde_json::to_vec(&firmware_package(0x20a + i as u16)).unwrap();
+        let (code, result) = rig.http(
+            "POST",
+            &format!("/v1/devices/{UID_A}/firmware"),
+            Some(json!({"data":bytes})),
+        );
+        assert_eq!(code, 200, "action {action}: {result}");
+        let state = rig.sims[0].state.lock().unwrap();
+        let actions = &state.firmware.as_ref().unwrap().actions[before..];
+        assert_eq!(
+            actions.iter().filter(|&&n| n == action).count(),
+            if action == 2 { 4 } else { 1 },
+            "{actions:?}"
+        );
+        assert!(state.writes.is_empty());
+    }
+}
+#[test]
+fn firmware_failed_trial_rolls_back_and_failed_upload_releases_maintenance() {
+    let rig = Rig::new("", 600);
+    rig.sims[0].state.lock().unwrap().enable_ab();
+    rig.ready();
+    let data = serde_json::to_vec(&firmware_package(0x20a)).unwrap();
+    rig.sims[0].state.lock().unwrap().inject.fail_firmware_trial = true;
+    let (code, result) = rig.http(
+        "POST",
+        &format!("/v1/devices/{UID_A}/firmware"),
+        Some(json!({"data":data})),
+    );
+    assert_eq!(code, 502, "{result}");
+    assert_eq!(
+        result["error"]["details"]["update"]["outcome"],
+        "rolled_back"
+    );
+    let (_, status) = rig.run(&["status", UID_A]);
+    assert_eq!(status["power_state"], "OFF");
+    {
+        let mut state = rig.sims[0].state.lock().unwrap();
+        state.inject.fail_firmware_trial = false;
+        state.inject.fail_firmware_write = true;
+    }
+    let data = serde_json::to_vec(&firmware_package(0x20a)).unwrap();
+    let (code, result) = rig.http(
+        "POST",
+        &format!("/v1/devices/{UID_A}/firmware"),
+        Some(json!({"data":data})),
+    );
+    assert_eq!(code, 502, "{result}");
+    let state = rig.sims[0].state.lock().unwrap();
+    assert_eq!(state.firmware.as_ref().unwrap().confirmed, 0);
+    assert_eq!(state.firmware.as_ref().unwrap().upload_slot, None);
+    assert!(state.writes.is_empty());
+}

@@ -43,6 +43,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Update firmware over USB, inspect A/B slots, or roll back to the previous image.
+    Firmware {
+        #[command(subcommand)]
+        action: FirmwareCmd,
+    },
     /// List serial ports with USB metadata, without opening them.
     Ports,
     /// List connected Voloo devices with their state.
@@ -133,6 +138,19 @@ enum Cmd {
         #[command(subcommand)]
         action: DaemonCmd,
     },
+}
+
+#[derive(Subcommand)]
+enum FirmwareCmd {
+    /// Upload a local .voloofw package (or legacy USB .bin); verify and confirm it.
+    Update {
+        device: String,
+        file: std::path::PathBuf,
+    },
+    /// Trial-boot the previous A/B firmware; verify it before confirming rollback.
+    Rollback { device: String },
+    /// Read USB update support, current slot, previous firmware and trial state.
+    Status { device: String },
 }
 
 #[derive(Subcommand)]
@@ -403,6 +421,56 @@ fn fault_lines(faults: &Value) -> String {
 
 fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
     match cmd {
+        Cmd::Firmware { action } => {
+            if matches!(ctx.backend, Backend::Direct { .. }) {
+                return Err(OpError::new(
+                    ErrorKind::InvalidArgument,
+                    "Firmware maintenance is managed by the background process; omit --direct/--port so it can release and reconnect the selected device safely",
+                ));
+            }
+            let client = daemon_client()?;
+            let (device, method, suffix, body) = match action {
+                FirmwareCmd::Status { device } => (device, "GET", "", None),
+                FirmwareCmd::Rollback { device } => (device, "POST", "/rollback", Some(json!({}))),
+                FirmwareCmd::Update { device, file } => {
+                    use std::io::Read;
+                    let source = std::fs::File::open(&file).map_err(|e| {
+                        OpError::new(
+                            ErrorKind::InvalidArgument,
+                            format!("Cannot read firmware {}: {e}", file.display()),
+                        )
+                    })?;
+                    let mut data = Vec::new();
+                    source
+                        .take(voloo::firmware::MAX_FILE as u64 + 1)
+                        .read_to_end(&mut data)
+                        .map_err(|e| OpError::new(ErrorKind::InvalidArgument, e.to_string()))?;
+                    voloo::firmware::Image::parse(&data)?;
+                    (device, "POST", "", Some(json!({"data":data})))
+                }
+            };
+            if !ctx.json && method == "POST" {
+                eprintln!(
+                    "Firmware maintenance for {device}: the background process will reconnect and verify the device. Keep USB connected."
+                );
+            }
+            let value = client.call(
+                method,
+                &format!("/v1/devices/{}/firmware{suffix}", enc(&device)),
+                body.as_ref(),
+            )?;
+            emit(ctx, &value, || {
+                if method == "GET" {
+                    serde_json::to_string_pretty(&value).unwrap()
+                } else {
+                    format!(
+                        "{} firmware maintenance completed: {} · output OFF · connection verified",
+                        value["uid"].as_str().unwrap_or(""),
+                        value["identity"]["firmware_version"].as_str().unwrap_or("")
+                    )
+                }
+            });
+        }
         Cmd::Ports => {
             let ports = json!(discover::list_ports()?);
             emit(ctx, &ports, || {

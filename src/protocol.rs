@@ -26,6 +26,8 @@ pub const ADC_BLOCK: (u16, u16) = (0x0300, 13);
 pub const FAST_BLOCK: (u16, u16) = (0x0400, 13);
 pub const NICKNAME_MAX_BYTES: usize = 24;
 pub const CAP_NICKNAME: u16 = 0x0020;
+pub const CAP_USB_ISP: u16 = 0x0400;
+pub const CAP_AB_UPDATE: u16 = 0x0800;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ProtocolError {
@@ -138,11 +140,13 @@ impl Command {
 pub enum Expect {
     Registers { fc: u8, count: u16 },
     Echo { fc: u8, frame: Vec<u8> },
+    Firmware { action: u8 },
 }
 impl Expect {
     pub fn fc(&self) -> u8 {
         match self {
             Expect::Registers { fc, .. } | Expect::Echo { fc, .. } => *fc,
+            Expect::Firmware { .. } => 0x49,
         }
     }
 }
@@ -154,6 +158,30 @@ pub struct Request {
     pub expect: Expect,
     /// Name used in traces, e.g. "read 0x0000/6" or "control on".
     pub label: String,
+}
+
+pub fn firmware_request(uid: Uid, action: u8, payload: &[u8]) -> Result<Request, ProtocolError> {
+    if action > 7 || payload.len() > 242 {
+        return Err(ProtocolError::Malformed("invalid firmware request"));
+    }
+    let mut data = vec![action, payload.len() as u8];
+    data.extend_from_slice(payload);
+    Ok(Request {
+        uid,
+        frame: addressed(0x49, uid, &data),
+        expect: Expect::Firmware { action },
+        label: format!("firmware action {action}"),
+    })
+}
+
+pub fn enter_usb_isp(uid: Uid) -> Request {
+    let frame = addressed(0x48, uid, &[0, 1, 0, 0]);
+    Request {
+        uid,
+        frame: frame.clone(),
+        expect: Expect::Echo { fc: 0x48, frame },
+        label: "enter USB ROM ISP".into(),
+    }
 }
 
 pub fn read_input(uid: Uid, start: u16, count: u16) -> Result<Request, ProtocolError> {
@@ -312,8 +340,18 @@ impl FrameDecoder {
                 break;
             }
             let length = match self.buffer[1] {
-                0x83 | 0x84 | 0x86 | 0x90 => 13,
-                FC_WRITE_SINGLE | FC_WRITE_MULTIPLE => 16,
+                0x83 | 0x84 | 0x86 | 0x90 | 0xC8 | 0xC9 => 13,
+                FC_WRITE_SINGLE | FC_WRITE_MULTIPLE | 0x48 => 16,
+                0x49 => {
+                    if self.buffer.len() < 12 {
+                        break;
+                    }
+                    if self.buffer[11] != 32 {
+                        self.skip();
+                        continue;
+                    }
+                    46
+                }
                 FC_READ_HOLDING | FC_READ_INPUT => {
                     if self.buffer.len() < 11 {
                         break;
@@ -356,6 +394,7 @@ pub enum Matched {
     Registers(Vec<u16>),
     Echo,
     Exception(DeviceException),
+    Firmware(Vec<u8>),
 }
 
 /// Returns `None` when the frame belongs to a different UID/function/shape (stale or foreign).
@@ -387,17 +426,22 @@ pub fn match_reply(uid: Uid, expect: &Expect, frame: &[u8]) -> Option<Matched> {
             ))
         }
         Expect::Echo { frame: echo, .. } => (frame == echo.as_slice()).then_some(Matched::Echo),
+        Expect::Firmware { action } => {
+            (frame.len() == 46 && frame[10] == *action && frame[11] == 32)
+                .then(|| Matched::Firmware(frame[12..44].to_vec()))
+        }
     }
 }
 
 pub const STATE_NAMES: [&str; 4] = ["OFF", "ON", "TURNING_ON", "DISCHARGING"];
-pub const RESULT_NAMES: [&str; 6] = [
+pub const RESULT_NAMES: [&str; 7] = [
     "NONE",
     "RUNNING",
     "SUCCESS",
     "DISCHARGE_TIMEOUT",
     "MEASUREMENT_INVALID",
     "INTERNAL_ERROR",
+    "OVERVOLTAGE",
 ];
 pub mod flags {
     pub const OUTPUT: u16 = 0x0001;

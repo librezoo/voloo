@@ -7,6 +7,7 @@ pub mod config;
 pub mod daemon;
 pub mod device;
 pub mod discover;
+pub mod firmware;
 pub mod home;
 pub mod link;
 pub mod manager;
