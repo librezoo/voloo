@@ -58,6 +58,7 @@ const state = {
   devices: new Map(), history: new Map(), pending: new Map(), unknown: new Map(),
   ops: [], faults: [], view: 'devices', feed: 'all', filter: '', live: false,
   sheet: null, cycleMs: 1000, cycleDischarge: true,
+  localPending: new Set(), lockPending: new Set(),
 };
 let signedOut = false;
 
@@ -168,7 +169,7 @@ function offlineReason(d) {
   const why = (d.faults || []).find((f) => f.active && ['LINK_UNPLUGGED', 'LINK_NO_RESPONSE', 'LINK_PORT_BUSY'].includes(f.code));
   return why ? FAULT[why.code] : 'Not connected';
 }
-const canAct = (d) => d.online && !d.locked && !state.pending.has(d.uid) && !(d.status && d.status.busy);
+const canAct = (d) => !!d && state.live && !signedOut && d.online && !!d.status && !d.locked && !state.lockPending.has(d.uid) && !state.unknown.has(d.uid) && !state.pending.has(d.uid) && !d.status.busy;
 const isFullyOff = (d) => { const s = d.status || {}; return s.state_code === 0 && !s.output_enabled && !s.discharge_enabled && !s.busy; };
 
 function upsert(snapshot) {
@@ -187,6 +188,13 @@ function record(uid, s, at) {
 // ---------- hold to confirm ----------
 function holdable(btn, { onFire, hint }) {
   let timer = null, started = 0;
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+    btn.classList.remove('holding');
+  };
+  const controller = new AbortController();
+  btn.cancelHold = () => { cancel(); controller.abort(); };
   btn.style.setProperty('--hold', `${HOLD_MS}ms`); // CSSOM: allowed by the page's CSP
   const begin = (e) => {
     if (btn.disabled || timer || btn.classList.contains('working')) return;
@@ -197,10 +205,12 @@ function holdable(btn, { onFire, hint }) {
     e.preventDefault();
     e.stopPropagation();
     started = performance.now();
+    const caught = btn.dataset.caught;
     btn.classList.add('holding');
     timer = setTimeout(async () => {
       timer = null;
       btn.classList.remove('holding');
+      if (btn.disabled || !btn.isConnected || document.hidden || caught !== btn.dataset.caught) return;
       btn.classList.add('working', 'fired');
       setTimeout(() => btn.classList.remove('fired'), 700);
       try { await onFire(); } finally { btn.classList.remove('working'); }
@@ -216,8 +226,11 @@ function holdable(btn, { onFire, hint }) {
   };
   btn.addEventListener('pointerdown', begin);
   btn.addEventListener('pointerup', end);
-  btn.addEventListener('pointercancel', end);
-  btn.addEventListener('lostpointercapture', end);
+  btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('lostpointercapture', cancel);
+  btn.addEventListener('blur', cancel);
+  window.addEventListener('blur', cancel, { signal: controller.signal });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); }, { signal: controller.signal });
   btn.addEventListener('click', (e) => e.stopPropagation());
   btn.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) begin(e); });
   btn.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') end(e); });
@@ -242,12 +255,19 @@ const holdHint = (d) => (d && d.status && d.status.output_enabled ? 'Hold to swi
 
 // ---------- actions ----------
 async function act(d, action, method, path, body) {
+  // Recheck at the end of a hold: a live update may have locked or disconnected it.
+  if (!canAct(d) || (action === 'nickname' && !isFullyOff(d))) return;
   const name = nameOf(d);
+  state.localPending.add(d.uid);
   state.pending.set(d.uid, action);
   state.unknown.delete(d.uid);
   render();
   try {
     const r = await api(method, path, body);
+    const current = state.devices.get(d.uid);
+    if (current && action === 'nickname') current.nickname = r.nickname ?? body.nickname;
+    const status = r.status || r.on?.status;
+    if (current && status) upsert({ uid: d.uid, status, observed_at: new Date().toISOString() });
     let title = `${name} ${DONE[action]}`;
     if (r.outcome === 'already_satisfied') title = `${name} was already ${action === 'discharge' ? 'discharged' : action}`;
     const vout = (r.status && r.status.vout_mv) ?? (r.on && r.on.status && r.on.status.vout_mv);
@@ -255,12 +275,15 @@ async function act(d, action, method, path, body) {
     notify('ok', title + extra);
   } catch (e) {
     if (e.code === 'unauthorized') return notify('bad', 'Signed out', e.message);
+    // A lost HTTP reply does not cancel a device operation. Never silently retry it.
+    if (e instanceof TypeError) e = { code: 'unknown', message: 'Connection lost. Read the device state before trying another action.' };
     if (e.code === 'unknown') state.unknown.set(d.uid, e.message);
     const hint = (e.faults || []).filter((f) => f.active || !f.condition).map((f) => f.suggestion)[0];
     notify(e.code === 'unknown' ? 'warn' : 'bad', e.code === 'unknown' ? `${name}: result unknown` : `Couldn't ${FAIL[action]} ${name}`, hint || e.message);
     const tile = document.querySelector(`.tile[data-uid="${CSS.escape(d.uid)}"]`);
     if (tile) { tile.classList.remove('shake'); void tile.offsetWidth; tile.classList.add('shake'); }
   } finally {
+    state.localPending.delete(d.uid);
     state.pending.delete(d.uid);
     render();
   }
@@ -270,6 +293,9 @@ const toggle = (d) => d && power(d, d.status && d.status.output_enabled ? 'off' 
 const cycle = (d) => act(d, 'cycle', 'POST', `/v1/devices/${enc(d.uid)}/cycle`, { off_ms: state.cycleMs, discharge: state.cycleDischarge });
 const rename = (d, nickname) => act(d, 'nickname', 'PUT', `/v1/devices/${enc(d.uid)}/nickname`, { nickname });
 async function setLock(d, locked) {
+  if (!state.live || signedOut || state.lockPending.has(d.uid)) return;
+  state.lockPending.add(d.uid);
+  render();
   try {
     const r = await api('POST', `/v1/devices/${enc(d.uid)}/lock`, { locked });
     Object.assign(d, { locked: r.locked, lock_source: r.lock_source });
@@ -277,6 +303,17 @@ async function setLock(d, locked) {
   } catch (e) {
     notify('bad', "Couldn't change the lock", e.message);
   }
+  state.lockPending.delete(d.uid);
+  render();
+}
+
+async function checkState(uid) {
+  try {
+    const report = await api('GET', `/v1/devices/${enc(uid)}/status`);
+    const d = state.devices.get(uid);
+    if (d) upsert({ uid, status: report.status, online: true, observed_at: new Date().toISOString() });
+    state.unknown.delete(uid);
+  } catch (e) { notify('bad', 'Could not read device state', e.message); }
   render();
 }
 
@@ -376,13 +413,15 @@ function updateTile(t, d) {
 function openSheet(uid) {
   const dlg = $('sheet');
   if (state.sheet && state.sheet.uid === uid && dlg.open) return;
+  cancelHolds(dlg);
   state.sheet = makeSheet(uid);
   dlg.replaceChildren(state.sheet.root);
   if (!dlg.open) dlg.showModal();
   state.sheet.update(state.devices.get(uid));
   state.sheet.close.focus();
 }
-const closeSheet = () => { const dlg = $('sheet'); if (dlg.open) dlg.close(); };
+function cancelHolds(root) { root.querySelectorAll('button').forEach((b) => b.cancelHold?.()); }
+const closeSheet = () => { const dlg = $('sheet'); cancelHolds(dlg); if (dlg.open) dlg.close(); };
 
 function holdButton(cls, label, sub) {
   return h('button', { class: `hold-btn ${cls}` }, h('span', { class: 'fill' }), h('span', { class: 'label' }, label, h('span', { class: 'sub' }, sub)), h('span', { class: 'kicker' }));
@@ -443,12 +482,12 @@ function makeSheet(uid) {
     sheet.editing = changed;
     renameBar.hidden = !changed;
     renameBar.replaceChildren(
-      h('button', { class: 'pill-btn primary', disabled: n > 24, onclick: saveName }, 'Save'),
+      h('button', { class: 'pill-btn primary', disabled: n > 24 || !canAct(d) || !isFullyOff(d), onclick: saveName }, 'Save'),
       h('button', { class: 'pill-btn', onclick: cancelName }, 'Cancel'),
       h('span', {}, n > 24 ? `${n}/24 bytes · too long` : `Stored on the device · ${n}/24 bytes`));
   };
   const saveName = () => {
-    if (bytes(nameInput.value) > 24) return;
+    if (bytes(nameInput.value) > 24 || !canAct(current()) || !isFullyOff(current())) return;
     sheet.editing = false;
     renameBar.hidden = true;
     nameInput.blur();
@@ -462,6 +501,7 @@ function makeSheet(uid) {
   };
   nameInput.addEventListener('input', showRename);
   nameInput.addEventListener('keydown', (e) => {
+    if (e.isComposing) return;
     if (e.key === 'Enter') { e.preventDefault(); if (sheet.editing) saveName(); }
     if (e.key === 'Escape' && sheet.editing) { e.preventDefault(); e.stopPropagation(); cancelName(); }
   });
@@ -480,7 +520,8 @@ function makeSheet(uid) {
     const label = nameOf(d);
     const vis = visual(d);
     root.dataset.state = vis;
-    const offOk = d.online && isFullyOff(d) && !d.locked && !state.pending.has(uid);
+    const offOk = canAct(d) && isFullyOff(d);
+    if (sheet.editing) showRename();
     if (!sheet.editing) nameInput.value = d.nickname || '';
     nameInput.placeholder = label;
     nameInput.disabled = !offOk;
@@ -492,8 +533,8 @@ function makeSheet(uid) {
 
     const items = [];
     if (state.unknown.has(uid)) items.push(h('div', { class: 'callout bad', html: ICON.warn },
-      h('span', {}, h('b', {}, 'Result unknown. '), state.unknown.get(uid), ' The reading below is fresh — check it before doing anything else.'),
-      h('button', { class: 'x', onclick: () => { state.unknown.delete(uid); render(); } }, 'OK')));
+      h('span', {}, h('b', {}, 'Result unknown. '), state.unknown.get(uid), ' Read the device state before doing anything else.'),
+      h('button', { class: 'x', disabled: !state.live || state.pending.has(uid), onclick: () => checkState(uid) }, 'Check state')));
     if (!d.online) items.push(h('div', { class: 'callout warn', html: ICON.info }, h('span', {}, h('b', {}, `${offlineReason(d)}. `), 'The output keeps whatever state it had, which is unknown from here. Reconnect the USB cable.')));
     if (d.online && !s.output_enabled && !s.busy && s.vout_valid && s.vout_mv > 1000) items.push(h('div', { class: 'callout warn', html: ICON.info }, h('span', {}, h('b', {}, `The load still holds ${v2(s.vout_mv)} V. `), 'Switching off does not drain it — hold Discharge to bring it to ≤ 1 V.')));
     setKeyed(callouts, items.map((x) => x.textContent).join('|'), () => items);
@@ -513,13 +554,14 @@ function makeSheet(uid) {
     primary.disabled = discharge.disabled = cycleBtn.disabled = !can;
     primary.classList.toggle('primary', !s.output_enabled);
     primary.classList.toggle('btn-off', !!s.output_enabled);
+    primary.dataset.caught = String(!!s.output_enabled);
     const pLabel = primary.querySelector('.label');
     if (!primary.querySelector('.sub').dataset.text) pLabel.firstChild.textContent = s.output_enabled ? 'Switch Off' : 'Switch On';
     cycleBtn.querySelector('.sub').dataset.text || (cycleBtn.querySelector('.sub').textContent = `${state.cycleDischarge ? 'Drain' : 'Off'} · ${state.cycleMs < 1000 ? '0.5' : state.cycleMs / 1000} s · on`);
     for (const b of cycleSeg.children) b.setAttribute('aria-checked', String(Number(b.dataset.ms) === state.cycleMs));
     dischargeFirst.checked = state.cycleDischarge;
     lockSwitch.checked = !d.locked;
-    lockSwitch.disabled = d.lock_source === 'config';
+    lockSwitch.disabled = !state.live || signedOut || state.lockPending.has(uid) || d.lock_source === 'config';
     lockDesc.textContent = d.lock_source === 'config' ? 'Locked in config.toml' : d.locked ? 'Locked — no app, script or agent can switch or rename it' : 'Web, Terminal, AI agents and the API can switch it';
 
     const shown = [...activeFaults(d), ...recentEvents(d)];
@@ -648,7 +690,10 @@ function faultRow(f) {
   return row;
 }
 function renderFeed() {
-  const items = state.feed === 'faults' ? state.faults.map((f) => ({ at: f.last_seen, row: faultRow(f) })) : state.ops.map((o) => ({ at: o.at, row: opRow(o) }));
+  const items = (state.feed === 'faults' ? state.faults.map((f) => ({ at: f.last_seen, row: faultRow(f) })) : [
+    ...state.ops.map((o) => ({ at: o.at, row: opRow(o) })),
+    ...state.faults.map((f) => ({ at: f.last_seen, row: faultRow(f) })),
+  ]).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   if (!items.length) {
     $('feed').replaceChildren(h('div', { class: 'feed-empty' }, state.feed === 'faults' ? 'No faults. Everything is working.' : 'Nothing has happened yet.'));
     return;
@@ -701,15 +746,16 @@ function draw() {
   const list = all.filter((d) => !f || nameOf(d).toLowerCase().includes(f) || d.uid.toLowerCase().includes(f))
     .sort((a, b) => nameOf(a).localeCompare(nameOf(b), undefined, { numeric: true }));
   const box = $('tiles');
-  for (const [uid, t] of tiles) if (!state.devices.has(uid)) { t.el.remove(); tiles.delete(uid); }
+  for (const [uid, t] of tiles) if (!state.devices.has(uid)) { cancelHolds(t.el); t.el.remove(); tiles.delete(uid); }
   list.forEach((d, i) => {
     let t = tiles.get(d.uid);
     if (!t) { t = makeTile(d.uid); tiles.set(d.uid, t); }
     updateTile(t, d);
     if (box.children[i] !== t.el) box.insertBefore(t.el, box.children[i] || null);
   });
-  for (const [uid, t] of tiles) if (!list.some((d) => d.uid === uid) && t.el.parentNode) t.el.remove();
+  for (const [uid, t] of tiles) if (!list.some((d) => d.uid === uid) && t.el.parentNode) { t.glyphBtn.dispatchEvent(new Event('blur')); t.el.remove(); }
   $('empty').hidden = all.length > 0;
+  $('no-results').hidden = !all.length || !!list.length;
 
   if (state.view === 'activity') renderFeed();
   if (state.sheet && $('sheet').open) state.sheet.update(state.devices.get(state.sheet.uid));
@@ -739,8 +785,19 @@ function connect() {
   const es = new EventSource('/v1/events');
   const on = (kind, fn) => es.addEventListener(kind, (e) => { fn(JSON.parse(e.data)); render(); });
   es.onopen = () => { state.live = true; render(); };
-  es.onerror = () => { state.live = false; render(); };
-  on('hello', (e) => e.devices.forEach(upsert));
+  es.onerror = () => {
+    state.live = false;
+    render();
+    // EventSource does not expose a 401. Probe through fetch and stop reconnecting
+    // when the browser session has expired.
+    api('GET', '/v1/devices').catch((e) => { if (e.code === 'unauthorized') es.close(); });
+  };
+  on('hello', (e) => {
+    state.devices.clear();
+    e.devices.forEach(upsert);
+    for (const uid of state.pending.keys()) if (!state.localPending.has(uid)) state.pending.delete(uid);
+    refresh().catch(() => {});
+  });
   for (const k of ['device.added', 'device.removed', 'device.offline', 'device.online']) on(k, (e) => upsert(e.data));
   on('status', (e) => {
     const d = state.devices.get(e.data.uid) || { uid: e.data.uid };
@@ -753,9 +810,9 @@ function connect() {
   on('operation.finished', (e) => {
     const op = normalizeOp({ ...e.data, at: e.at });
     state.ops = [op, ...state.ops].slice(0, 300);
+    if (!state.localPending.has(op.uid)) state.pending.delete(op.uid);
+    if (op.ok === false && op.error && op.error.code === 'unknown') state.unknown.set(op.uid, op.error.message);
     if (op.source !== 'ui') {
-      state.pending.delete(op.uid);
-      if (op.ok === false && op.error && op.error.code === 'unknown') state.unknown.set(op.uid, op.error.message);
       const d = state.devices.get(op.uid);
       if (d && op.ok) notify('ok', `${nameOf(d)} ${DONE[op.action] || op.action}`, `by ${SOURCE[op.source] || op.source}`);
     }
@@ -770,8 +827,9 @@ document.addEventListener('DOMContentLoaded', () => {
   for (const b of document.querySelectorAll('[data-feed]')) b.addEventListener('click', () => { state.feed = b.dataset.feed; render(); });
   const dlg = $('sheet');
   dlg.addEventListener('click', (e) => { if (e.target === dlg) closeSheet(); });
-  dlg.addEventListener('close', () => { state.sheet = null; });
+  dlg.addEventListener('cancel', () => cancelHolds(dlg));
+  dlg.addEventListener('close', () => { cancelHolds(dlg); state.sheet = null; });
   document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('filter').focus(); } });
-  refresh().then(connect).catch((e) => { signedOut = e.code === 'unauthorized'; render(); });
+  refresh().catch((e) => { signedOut = e.code === 'unauthorized'; render(); }).finally(() => { if (!signedOut) connect(); });
   setInterval(render, 1000);
 });

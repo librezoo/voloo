@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Versions follow
 
 ## Unreleased
 
+### Fixed
+
+- Cancel power holds on focus loss, hidden pages, removed controls and state changes;
+  block actions while disconnected or waiting for an explicit read after an unknown result.
+- Clear completed operations from other browser pages, update nicknames immediately,
+  show search misses, and include faults in the All activity view.
+
 ## 0.7.0-rc.2 - 2026-11-12
 
 ### Fixed
