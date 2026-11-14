@@ -18,11 +18,11 @@ Three things to keep in mind:
 
 ## Tested operating range and overvoltage protection
 
-The project provider reported on 2026-11-14 that the current USB-C board works with a **3 A constant-current load across 3.3–28 V DC**. This is the recommended operating range. **30 V has not been tested and is not recommended.** The report does not extend to arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
+The project provider reported on 2026-11-14 that the current USB-C board works with a **3 A constant-current load across 3.3–28 V DC**. The nominal input range is **3.3–28 V DC**. The report does not extend to arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
 
-Load power is `P = V × I`: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. Do not advertise an untested 30 V / 90 W range. Voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.
+Load power is `P = V × I`: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. Voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.
 
-Published direct-USB X035 firmware **3.0** inhibits ON and turns off existing output when **valid measured VIN > 30.5 V**. The latch clears only at **valid VIN < 30.0 V**, and output stays OFF until a new manual ON. Exactly 30.5 V does not trip an unlatched unit. Invalid or stale VIN also inhibits/cancels ON. Overvoltage shutdown does not automatically discharge. These are software measurement thresholds, not validated physical clamp voltages or response-time guarantees, and they do not raise the 28 V recommended upper limit. Older v2.7.2 lacks this protection; updating the npm host is not a device firmware update. Read device info before assuming protection is present.
+Published direct-USB X035 firmware **3.0** inhibits ON and turns off existing output when **valid measured VIN > 30.5 V**. The latch clears only at **valid VIN < 30.0 V**, and output stays OFF until a new manual ON. Exactly 30.5 V does not trip an unlatched unit. Invalid or stale VIN also inhibits/cancels ON. Overvoltage shutdown does not automatically discharge. These are software measurement thresholds, not validated physical clamp voltages or response-time guarantees, and they do not raise the 28 V nominal upper limit. Older v2.7.2 lacks this protection; updating the npm host is not a device firmware update. Read device info before assuming protection is present.
 
 ## 1. Install
 
