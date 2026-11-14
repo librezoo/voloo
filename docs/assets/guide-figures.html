@@ -24,14 +24,14 @@
   <div class="callout"><b>避免多路供电：</b>被测设备自带 USB、调试器 VCC / 3V3、电池等供电应断开。当前硬件没有防反接，USB 与功率侧共地。</div>
 </section>
 <section class="figure" id="voltage-range">
-  <div class="heading"><small>FIG 03 · 电压边界</small><h2>工作范围和保护阈值分开看</h2></div>
+  <div class="heading"><small>FIG 03 · 电压与负载</small><h2>标称范围与软件保护分开看</h2></div>
   <div class="range-grid">
-    <div class="range-card tested"><p class="tag">实测下界</p><p class="value">3.3 V</p><p class="note">用户反馈：3 A 恒流负载正常</p></div>
-    <div class="range-card recommended"><p class="tag">建议工作上界</p><p class="value">28 V</p><p class="note">实测范围 3.3–28 V / 3 A</p></div>
-    <div class="range-card untested"><p class="tag">未测，不建议使用</p><p class="value">30 V</p><p class="note">不能由保护阈值推导可用范围</p></div>
+    <div class="range-card tested"><p class="tag">标称直流工作电压</p><p class="value">3.3–28 V</p><p class="note">正常使用按此标称范围</p></div>
+    <div class="range-card recommended"><p class="tag">恒流负载实测</p><p class="value">3 A</p><p class="note">3.3–28 V 范围工作正常</p></div>
+    <div class="range-card untested"><p class="tag">28 V / 3 A 工作点</p><p class="value">≈ 84 W</p><p class="note">按 P = U × I 换算负载功率</p></div>
     <div class="range-card trip"><p class="tag">固件 3.0 软件过压触发</p><p class="value">VIN &gt; 30.5 V</p><p class="note">使用固件发布的有效测量值</p></div>
   </div>
-  <div class="range-bottom">过压后，VIN 降至严格 &lt; 30.0 V 才解除锁定，仍需手动重新开启。软件保护不等同于瞬态硬件钳位；旧固件不能一概视为具备此功能。</div>
-  <p class="caption">实测范围来自项目提供者于 2026-11-14 的反馈，工况为 3 A 恒流负载；不是对全温、任意浪涌或长时间温升的额外保证。</p>
+  <div class="range-bottom">过压后，VIN 降至严格 &lt; 30.0 V 才解除锁定，仍需手动重新开启。软件保护阈值不改变 28 V 标称工作上限；旧固件不能一概视为具备此功能。</div>
+  <p class="caption">3 A 恒流负载结果来自项目提供者于 2026-11-14 的反馈；不扩展为全温、任意浪涌或长时间温升的额外保证。</p>
 </section>
 </body></html>
