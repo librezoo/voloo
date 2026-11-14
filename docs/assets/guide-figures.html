@@ -8,30 +8,30 @@
   <div class="ports-stage">
     <img src="product-render.png" alt="Voloo 外观渲染">
     <svg viewBox="0 0 1098 810" aria-hidden="true"><path class="wire" d="M310 130 H360 L444 225"/><circle class="dot" cx="444" cy="225" r="15"/><path class="wire" d="M845 280 H805 L740 340"/><circle class="dot" cx="740" cy="340" r="15"/><path class="wire" d="M480 705 V640 L454 510"/><circle class="dot" cx="454" cy="510" r="15"/></svg>
-    <div class="label in"><b><span class="stepnum">1</span>IN / SOURCE</b>接独立直流电源</div>
+    <div class="label in"><b><span class="stepnum">1</span>IN / SOURCE</b>接独立电源 A</div>
     <div class="label out"><b><span class="stepnum">2</span>OUT / DUT</b>接被测设备的电源输入</div>
-    <div class="label usb"><b><span class="stepnum">3</span>USB-C</b>数据线接电脑，负责控制</div>
+    <div class="label usb"><b><span class="stepnum">3</span>USB-C</b>接电脑主机，主机使用独立电源 B</div>
   </div>
   <p class="caption">外观渲染示意。接线以实物及外壳的 + / −、输入和输出标记为准；不要仅凭左右方向判断极性。</p>
 </section>
 <section class="figure" id="wiring">
   <div class="heading"><small>FIG 02 · 接线顺序</small><h2>电源供电，USB 负责控制</h2></div>
   <div class="connection">
-    <div class="connect-row"><div class="n">1</div><div><h3>独立直流电源</h3><p>3.3–28 V，先确认正负极</p></div><div class="arrow">→</div><div class="dest"><h3>IN / SOURCE</h3><p>关闭电源输出后再接线</p></div></div>
+    <div class="connect-row"><div class="n">1</div><div><h3>独立电源 A</h3><p>3.3–28 V，电流不超过 3 A</p></div><div class="arrow">→</div><div class="dest"><h3>IN / SOURCE</h3><p>关闭电源输出后再接线</p></div></div>
     <div class="connect-row"><div class="n">2</div><div><h3>OUT / DUT</h3><p>核对 + / − 标记</p></div><div class="arrow">→</div><div class="dest"><h3>被测设备</h3><p>只从这里取电</p></div></div>
-    <div class="connect-row"><div class="n">3</div><div><h3>电脑 USB</h3><p>使用支持数据的线</p></div><div class="arrow">→</div><div class="dest"><h3>Voloo USB-C</h3><p>控制与通信，不给负载供电</p></div></div>
+    <div class="connect-row"><div class="n">3</div><div><h3>电脑（电源 B）</h3><p>B 与 A 是不同的适配器</p></div><div class="arrow">→</div><div class="dest"><h3>Voloo USB-C</h3><p>控制与通信，不给负载供电</p></div></div>
   </div>
-  <div class="callout"><b>避免多路供电：</b>被测设备自带 USB、调试器 VCC / 3V3、电池等供电应断开。当前硬件没有防反接，USB 与功率侧共地。</div>
+  <div class="callout"><b>正负极接反会损坏硬件。</b><br>负载与操作电脑不要共用同一适配器，不同输出口也不行。分别使用独立电源 A / B；被测设备只从 OUT 取电。</div>
 </section>
 <section class="figure" id="voltage-range">
   <div class="heading"><small>FIG 03 · 电压与负载</small><h2>标称范围与软件保护分开看</h2></div>
   <div class="range-grid">
     <div class="range-card tested"><p class="tag">标称直流工作电压</p><p class="value">3.3–28 V</p><p class="note">正常使用按此标称范围</p></div>
-    <div class="range-card recommended"><p class="tag">恒流负载实测</p><p class="value">3 A</p><p class="note">3.3–28 V 范围工作正常</p></div>
+    <div class="range-card recommended"><p class="tag">最高建议电流</p><p class="value">3 A</p><p class="note">超过此电流可能损坏硬件</p></div>
     <div class="range-card untested"><p class="tag">28 V / 3 A 工作点</p><p class="value">≈ 84 W</p><p class="note">按 P = U × I 换算负载功率</p></div>
-    <div class="range-card trip"><p class="tag">固件 3.0 软件过压触发</p><p class="value">VIN &gt; 30.5 V</p><p class="note">使用固件发布的有效测量值</p></div>
+    <div class="range-card trip"><p class="tag">软件过压保护触发</p><p class="value">VIN &gt; 30.5 V</p><p class="note">使用固件发布的有效测量值</p></div>
   </div>
-  <div class="range-bottom">过压后，VIN 降至严格 &lt; 30.0 V 才解除锁定，仍需手动重新开启。软件保护阈值不改变 28 V 标称工作上限；旧固件不能一概视为具备此功能。</div>
-  <p class="caption">3 A 恒流负载结果来自项目提供者于 2026-11-14 的反馈；不扩展为全温、任意浪涌或长时间温升的额外保证。</p>
+  <div class="range-bottom">① VIN &gt; 30.5 V：自动关闭输出并锁定过压保护。<br>② VIN &lt; 30.0 V：自动解除过压锁定，输出仍关闭。<br>③ 用户重新长按“开启供电”或发送新的 ON 命令，才恢复供电。</div>
+  <p class="caption">过压保护自动解除，不等于自动重新供电；不需要额外的过压复位命令。最高建议电流为 3 A，请在外部电源上设置合适的限流。</p>
 </section>
 </body></html>
