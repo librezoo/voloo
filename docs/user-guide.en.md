@@ -1,6 +1,6 @@
 # Voloo user guide
 
-[中文使用说明](user-guide.md)
+[中文图文说明](user-guide.md)
 
 Voloo switches the power of a device under test (the load) on and off, from your
 computer, over one USB cable. The USB cable carries control only: the load's power
@@ -16,15 +16,13 @@ Three things to keep in mind:
 - **If a result is “unknown”, read the state before doing anything else.** Voloo never
   repeats a power command on its own after a lost reply.
 
-## Voltage current and power boundaries
+## Tested operating range and overvoltage protection
 
-For this supplied USB-C board, **3–30 V DC is a design-use reference range, not a full-range load qualification**. Do not exceed 30 V. Start with a light load at 3–5 V; unloaded conduction does not establish full-load operation.
+The project provider reported on 2026-11-14 that the current USB-C board works with a **3 A constant-current load across 3.3–28 V DC**. This is the recommended operating range. **30 V has not been tested and is not recommended.** The report does not extend to arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
 
-Use **3 A or less as an engineering reference ceiling**, with further derating for voltage drop, temperature and enclosure conditions. Full-voltage, full-temperature enclosed continuous-load ratings have not been established. A fuse or a single component rating is not a board-level continuous-current rating.
+Load power is `P = V × I`: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. Do not advertise an untested 30 V / 90 W range. Voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.
 
-Load power is `P = V × I`. At the 3 A reference current, 5/12/24/30 V correspond to 15/36/72/90 W **as arithmetic examples only**. In particular, 30 V × 3 A does not establish a qualified 90 W product rating. A separately validated maximum total-power rating is not claimed; where both current and power limits apply, use the stricter limit.
-
-Voloo does not regulate voltage or implement programmable current/power limiting. Set an appropriate current limit on the external supply and account for startup inrush, stall current and backfeed. Discharge is for residual load charge after external power is removed, not for draining batteries or absorbing continuously supplied power.
+Published direct-USB X035 firmware **3.0** inhibits ON and turns off existing output when **valid measured VIN > 30.5 V**. The latch clears only at **valid VIN < 30.0 V**, and output stays OFF until a new manual ON. Exactly 30.5 V does not trip an unlatched unit. Invalid or stale VIN also inhibits/cancels ON. Overvoltage shutdown does not automatically discharge. These are software measurement thresholds, not validated physical clamp voltages or response-time guarantees, and they do not raise the 28 V recommended upper limit. Older v2.7.2 lacks this protection; updating the npm host is not a device firmware update. Read device info before assuming protection is present.
 
 ## 1. Install
 
@@ -78,6 +76,10 @@ and anything that needs attention.
 - **Lock:** a locked device refuses every change from every client — dashboard,
   terminal, AI agents and programs — until you unlock it. `voloo lock bench-a` /
   `voloo unlock bench-a` do the same from the terminal.
+- **Unknown result:** power controls stay disabled until **Check state** reads fresh
+  device state successfully. A lost browser connection never triggers an automatic retry.
+- **Language and appearance:** choose English, 简体中文 or 繁體中文, and system,
+  light or dark appearance in the header. Preferences are saved in this browser.
 
 ## 4. AI agents (MCP)
 
@@ -224,6 +226,29 @@ history of every switch with who did it (terminal, web, AI agent or API).
 versions, device states and registers, recent faults and logs, and your settings. It
 contains no token, host name or user name, and nothing is sent anywhere; open it to
 check it, then attach it to your message.
+
+## USB firmware maintenance
+
+Open a device's details in the dashboard and use **USB firmware**, or run:
+
+```sh
+voloo firmware status DEV
+voloo firmware update DEV
+voloo firmware update DEV /path/to/firmware.voloofw  # optional offline file
+voloo firmware rollback DEV
+```
+
+Online updating downloads the encrypted firmware paired with this CLI release,
+then deletes its temporary file after verification or handled failure. It requires
+a factory-initialized secure 3.0 board with read and boot/key write protection.
+Old boards need trusted initial provisioning before encrypted online updating.
+
+The background process handles port ownership and reconnection automatically.
+The output must already be OFF with valid readings and VOUT <= 1 V; locks still
+apply, and the old ON state is never resumed. A/B trials are confirmed only after
+identity, version, nickname and state verification; failed trials restore the
+previous confirmed image. First migration from the old layout has different
+recovery limits. Read [firmware updates](firmware-updates.md) before migrating.
 
 ## 8. Building the packages (maintainers)
 

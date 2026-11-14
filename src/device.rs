@@ -211,6 +211,7 @@ pub struct Device {
     pub uid: Uid,
     pub recorder: Arc<Recorder>,
     pub budgets: Budgets,
+    pub firmware_fc: u8,
     /// Who asked: cli, mcp, http, ui. Written to the operation journal.
     pub source: &'static str,
 }
@@ -222,6 +223,7 @@ impl Device {
             uid,
             recorder,
             budgets: Budgets::default(),
+            firmware_fc: 0x49,
             source: "cli",
         }
     }
@@ -356,7 +358,9 @@ impl Device {
         match self.exchange_probe(trace_id, &req, None, optional) {
             Ok(Matched::Registers(r)) => Ok(r),
             Ok(Matched::Exception(e)) => Err(exception_error(e)),
-            Ok(Matched::Echo) => unreachable!("reads never match an echo"),
+            Ok(Matched::Echo | Matched::Firmware(_)) => {
+                unreachable!("reads never match other reply types")
+            }
             Err(e) => Err(link_error(e)),
         }
         .map_err(|e| e.at(trace_id, self.uid))
@@ -456,6 +460,11 @@ impl Device {
             .at(trace_id, self.uid)
             .details(json!({"reported_uid": identity.uid.to_string()})));
         }
+        self.firmware_fc = if identity.capabilities & protocol::CAP_SEALED != 0 {
+            0x4A
+        } else {
+            0x49
+        };
         Ok(identity)
     }
 
@@ -659,7 +668,7 @@ impl Device {
             match self.exchange(trace_id, &req, None) {
                 Ok(Matched::Echo) => acknowledged = Some(true),
                 Ok(Matched::Exception(e)) => return Err(exception_error(e).at(trace_id, self.uid)),
-                Ok(Matched::Registers(_)) => unreachable!(),
+                Ok(Matched::Registers(_) | Matched::Firmware(_)) => unreachable!(),
                 // Never resend after a lost ACK: confirm through status instead.
                 Err(LinkError::Timeout(_)) => acknowledged = Some(false),
                 Err(e) => {
@@ -785,7 +794,7 @@ impl Device {
                     Ok(Matched::Exception(e)) => {
                         return Err(exception_error(e).at(&trace_id, self.uid));
                     }
-                    Ok(Matched::Registers(_)) => unreachable!(),
+                    Ok(Matched::Registers(_) | Matched::Firmware(_)) => unreachable!(),
                     Err(LinkError::Timeout(_)) => false,
                     Err(e) => return Err(link_error(e).at(&trace_id, self.uid)),
                 };

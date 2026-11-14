@@ -13,6 +13,7 @@ use voloo::sim::{Shared, SimConfig, serve_tty, shared};
 
 struct Rig {
     path: String,
+    _slave: serialport::TTYPort,
     uid: String,
     home: tempfile::TempDir,
     state: Shared,
@@ -23,7 +24,7 @@ impl Rig {
     fn new(cfg: SimConfig) -> Rig {
         let (master, slave) = serialport::TTYPort::pair().unwrap();
         let path = serialport::SerialPort::name(&slave).unwrap();
-        drop(slave);
+        // Preserve the slave across CLI processes, as the real dev-sim does.
         let uid = cfg.uid.to_string();
         let state = shared(cfg);
         let stop = Arc::new(AtomicBool::new(false));
@@ -33,6 +34,7 @@ impl Rig {
         };
         Rig {
             path,
+            _slave: slave,
             uid,
             home: tempfile::tempdir().unwrap(),
             state,
