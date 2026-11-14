@@ -1,7 +1,7 @@
 # USB firmware updates and A/B rollback
 
-Version 0.7.0-rc.6 supports automatic encrypted USB updates for factory-initialized
-CH32X035 USB boards running secure firmware 3.0. The firmware source and factory
+Voloo supports automatic encrypted USB updates for factory-initialized
+CH32X035 USB boards. The firmware source and factory
 keys are private. npm contains the host program, not plaintext firmware or keys.
 
 ## Update or roll back
@@ -109,21 +109,18 @@ the current confirmed application but can leave no separate rollback image until
 a later successful upgrade. Corrupt boot/key storage or damage during initial
 factory provisioning is outside application A/B recovery.
 
-## Legacy devices and factory initialization
+## Factory initialization and security boundaries
 
-Legacy 2.8 and plaintext A/B 2.9 local files remain supported by the host, with
-existing safety checks. 2.8 ROM ISP updating needs `wchisp`; plaintext A/B uses
-native CDC. They cannot install the sealed public package by themselves. No
-plaintext first-install image, production key or factory vault is publicly
-provided. Transitioning an existing uninitialized board to secure 3.0 requires
-one trusted provisioning operation with private factory tools and preserved
-per-device configuration. Subsequent ordinary updates use USB without pad shorts.
+Factory provisioning is a separate trusted operation that preserves per-device
+configuration. No plaintext first-install image, production key or factory vault
+is publicly provided. Ordinary updates use USB without pad shorts after secure
+initialization has been completed.
 
-The initial boot-layout migration has no old-layout fallback. Power loss during
-that first migration can require physical recovery. Once read protection is
-active, recovery that removes it erases configuration and device credentials and
-requires trusted reprovisioning. Do not use generic erase/unprotect commands as
-an upgrade procedure.
+Factory provisioning does not have the same recovery guarantees as ordinary A/B
+updates; interruption can require physical recovery. Once read protection is
+active, removing it erases configuration and device credentials and requires
+trusted reprovisioning. Do not use generic erase/unprotect commands as an upgrade
+procedure.
 
 ## Local API
 
@@ -174,8 +171,6 @@ release, encrypted updates and state verification; the dashboard also confirmed
 rollback. During the CLI operation, an owner-only temporary directory containing
 ciphertext was observed and then removed, and the daemon PID stayed unchanged.
 Every final result reported protection flags 14 and output OFF.
-
-Earlier plaintext A/B tests also covered 2.8 migration and the real dashboard.
 
 Evidence is kept outside the repository in workspace `output/` directories;
 private key-containing backups stay in the private factory directory. Simulated

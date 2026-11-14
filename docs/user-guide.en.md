@@ -18,11 +18,17 @@ Three things to keep in mind:
 
 ## Tested operating range and overvoltage protection
 
-The project provider reported on 2026-11-14 that the current USB-C board works with a **3 A constant-current load across 3.3–28 V DC**. The nominal input range is **3.3–28 V DC**. The report does not extend to arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
+The project provider reported on 2026-11-14 that the current USB-C board works with a **3 A constant-current load across 3.3–28 V DC**. The nominal input range is **3.3–28 V DC**, and the **maximum recommended load current is 3 A. Exceeding 3 A can damage the hardware.** The report does not extend to arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
 
 Load power is `P = V × I`: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. Voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.
 
-Published direct-USB X035 firmware **3.0** inhibits ON and turns off existing output when **valid measured VIN > 30.5 V**. The latch clears only at **valid VIN < 30.0 V**, and output stays OFF until a new manual ON. Exactly 30.5 V does not trip an unlatched unit. Invalid or stale VIN also inhibits/cancels ON. Overvoltage shutdown does not automatically discharge. These are software measurement thresholds, not validated physical clamp voltages or response-time guarantees, and they do not raise the 28 V nominal upper limit. Older v2.7.2 lacks this protection; updating the npm host is not a device firmware update. Read device info before assuming protection is present.
+The firmware inhibits ON and turns off existing output when **valid measured VIN > 30.5 V**. At **valid VIN < 30.0 V, the overvoltage latch clears automatically**, but output **stays OFF**. No overvoltage reset command is needed. After returning to the nominal input range and checking the wiring and current, the user must explicitly press and hold **Switch On**, send a new `voloo on DEV` command, or ask the agent to switch that device on. Earlier ON state and rejected commands are never automatically resumed. The overvoltage latch is separate from the user operation lock set by `voloo lock`; `voloo unlock` does not reset overvoltage protection. Invalid or stale VIN also inhibits/cancels ON. Overvoltage shutdown does not automatically discharge. These are software measurement thresholds, not validated physical clamp voltages or response-time guarantees, and they do not raise the 28 V nominal upper limit.
+
+## Before connecting power
+
+- **Reversed supply polarity damages the hardware.** Verify + / − before wiring and turn the supply output off before connecting it.
+- **Do not power both the load supply and the USB host computer from the same adapter.** Use independent supply A for Voloo IN / the load and another independent supply B for the operating computer. Different output ports on one multiport adapter do not count as independent supplies. Do not take load power from the host computer's USB port.
+- **3 A is the maximum recommended current. Higher current can damage the hardware.** This applies at every operating voltage: for example, 12 V × 4 A = 48 W still exceeds the current limit even though it is below 84 W. Set an appropriate external current limit no higher than 3 A; Voloo does not actively limit current.
 
 ## 1. Install
 
@@ -241,14 +247,13 @@ voloo firmware rollback DEV
 Online updating downloads the encrypted firmware paired with this CLI release,
 then deletes its temporary file after verification or handled failure. It requires
 a factory-initialized secure 3.0 board with read and boot/key write protection.
-Old boards need trusted initial provisioning before encrypted online updating.
+Devices must be securely initialized by the factory before encrypted online updating.
 
 The background process handles port ownership and reconnection automatically.
 The output must already be OFF with valid readings and VOUT <= 1 V; locks still
 apply, and the old ON state is never resumed. A/B trials are confirmed only after
 identity, version, nickname and state verification; failed trials restore the
-previous confirmed image. First migration from the old layout has different
-recovery limits. Read [firmware updates](firmware-updates.md) before migrating.
+previous confirmed image. Read [firmware updates](firmware-updates.md) for prerequisites and recovery boundaries.
 
 ## 8. Building the packages (maintainers)
 
