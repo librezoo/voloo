@@ -66,6 +66,10 @@ for dark in [False, True]:
         content += inset_word(338, 14, 220, 72, ink)
         (HERE / name).write_text(svg('0 0 600 100', content, 'librezoo · voloo'))
     parent_file = 'librezoo-horizontal-on-dark.svg' if dark else 'librezoo-horizontal-small.svg'
+    compact = parent(parent_file, 0, 12, 120)
+    compact += f'<path d="M134 10V40" fill="none" stroke="{ink}" stroke-width="1" opacity=".25"/>'
+    compact += inset_word(150, 7, 94, 32, ink)
+    (HERE / f'librezoo-voloo-compact{suffix}.svg').write_text(svg('0 0 244 50', compact, 'librezoo · voloo'))
     content = parent(parent_file, 10, 10, 120) + inset_word(18, 48, 104, 34, ink)
     (HERE / f'librezoo-voloo-stacked{suffix}.svg').write_text(svg('0 0 140 86', content, 'librezoo · voloo'))
 

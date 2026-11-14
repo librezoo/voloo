@@ -5,6 +5,7 @@
 - `voloo-wordmark.svg`：独立产品字标，透明底、墨紫色。
 - `librezoo-voloo.svg`：完整 librezoo 图文标与 voloo 的横排组合，用于海报页头。
 - `librezoo-voloo-small.svg`：小尺寸横排组合，采用 LibreZoo 母版的小尺寸圆点配色。
+- `librezoo-voloo-compact.svg`：窄屏导航用的紧凑横排组合，母品牌保留 120 px 的显示宽度。
 - `librezoo-voloo-stacked.svg`：窄屏组合，保持完整 librezoo 名称与 voloo 字标。
 - `*-on-dark.svg`：对应的深底版本。
 - `png/`：以上各版本的透明底 PNG，可直接用于排版。
