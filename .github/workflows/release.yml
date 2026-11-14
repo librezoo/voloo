@@ -35,14 +35,48 @@ jobs:
           echo "VERSION=$version" >> "$GITHUB_ENV"
           ls -l dist/npm dist/pypi
           test "$(ls dist/npm/librezoo-voloo-*.tgz | wc -l)" = 6
-      - name: Publish platform packages, then the main package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          node packaging/npm/publish.mjs "$VERSION"
-      - name: GitHub release with all packages
+      - name: Obtain and inspect the paired encrypted firmware
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          flag=; case "$VERSION" in *-*) flag=--prerelease;; esac
-          gh release create "$GITHUB_REF_NAME" $flag --generate-notes dist/npm/*.tgz dist/pypi/*.whl
+          mkdir -p dist/firmware dist/firmware-client
+          # The publisher stages only ciphertext in this draft before tagging.
+          gh release download "$GITHUB_REF_NAME" --pattern voloo-switch-x035.voloofw --dir dist/firmware
+          tar -xzf "dist/npm/librezoo-voloo-linux-x64-$VERSION.tgz" -C dist/firmware-client
+          dist/firmware-client/package/bin/voloo --json firmware inspect dist/firmware/voloo-switch-x035.voloofw
+      - name: Make the complete release downloadable before npm publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" --clobber dist/npm/*.tgz dist/pypi/*.whl
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false
+          # Check the unauthenticated URL used by installed clients before npm
+          # users receive this version. Draft asset access alone is insufficient.
+          curl --fail --location --proto '=https' --proto-redir '=https' --max-time 30 --retry 3 \
+            --output dist/firmware/public.voloofw \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/voloo-switch-x035.voloofw"
+          dist/firmware-client/package/bin/voloo --json firmware inspect dist/firmware/public.voloofw
+      - name: Publish platform packages, then the main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node packaging/npm/publish.mjs "$VERSION"
+      - name: Check a clean registry install before advancing the default app version
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          install_root=$(mktemp -d)
+          trap 'rm -rf "$install_root"' EXIT
+          # npm can acknowledge publication before registry reads see it.
+          # Each attempt has a fresh prefix so optional-dependency misses cannot
+          # leave a partial installation for the next verification.
+          for attempt in {1..20}; do
+            install_dir="$install_root/attempt-$attempt"
+            if npm install --prefix "$install_dir" --ignore-scripts --prefer-online "@librezoo/voloo@$VERSION" \
+              && "$install_dir/node_modules/.bin/voloo" --version \
+              && "$install_dir/node_modules/.bin/voloo" firmware update --help; then
+              npm dist-tag add "@librezoo/voloo@$VERSION" latest
+              exit 0
+            fi
+            test "$attempt" -lt 20 || exit 1
+            sleep 15
+          done

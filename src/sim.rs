@@ -52,6 +52,182 @@ pub struct Inject {
     /// Disconnect right after a control write is received (its reply is lost).
     pub unplug_after_control: bool,
     pub missing_adc_block: bool,
+    pub fail_firmware_trial: bool,
+    pub drop_update_ack: Option<u8>,
+    pub firmware_write_delay: Option<Duration>,
+    pub fail_firmware_write: bool,
+    pub firmware_settling_reads: u32,
+    /// Lose status replies only while an unconfirmed candidate is running.
+    pub drop_trial_status_replies: u32,
+}
+
+/// Firmware transport model for host/PTY tests. This does not model flash cells
+/// or boot timing; those are tested by the firmware's C suite and on hardware.
+#[derive(Debug)]
+pub struct FirmwareSim {
+    pub running: u8,
+    pub confirmed: u8,
+    pub previous: Option<u8>,
+    pub candidate: Option<u8>,
+    pub trial: u8,
+    pub versions: [u16; 2],
+    pub lengths: [u16; 2],
+    pub crcs: [u16; 2],
+    pub upload_slot: Option<u8>,
+    pub expected: usize,
+    pub data: Vec<u8>,
+    pub expected_crc: u16,
+    pub new_version: u16,
+    pub rollback_count: u32,
+    pub sequence: u32,
+    pub trial_since: Option<Instant>,
+    pub actions: Vec<u8>,
+    pub failed: bool,
+}
+impl Default for FirmwareSim {
+    fn default() -> Self {
+        Self {
+            running: 0,
+            confirmed: 0,
+            previous: Some(1),
+            candidate: None,
+            trial: 0,
+            versions: [0x209; 2],
+            lengths: [512; 2],
+            crcs: [0; 2],
+            upload_slot: None,
+            expected: 0,
+            data: Vec::new(),
+            expected_crc: 0,
+            new_version: 0,
+            rollback_count: 0,
+            sequence: 1,
+            trial_since: None,
+            actions: Vec::new(),
+            failed: false,
+        }
+    }
+}
+impl FirmwareSim {
+    fn tick(&mut self) {
+        if self.trial == 2
+            && self
+                .trial_since
+                .is_some_and(|t| t.elapsed() > Duration::from_secs(5))
+        {
+            self.running = self.confirmed;
+            self.candidate = None;
+            self.trial = 0;
+            self.trial_since = None;
+            self.rollback_count += 1;
+            self.sequence += 1;
+        }
+    }
+    fn state(&self) -> Vec<u8> {
+        let mut p = vec![
+            1,
+            self.running,
+            self.confirmed,
+            self.previous.unwrap_or(255),
+            self.candidate.unwrap_or(255),
+            self.trial,
+            self.upload_slot.unwrap_or(255),
+            u8::from(self.failed),
+        ];
+        for n in self
+            .versions
+            .into_iter()
+            .chain(self.lengths)
+            .chain(self.crcs)
+            .chain([self.data.len() as u16, self.expected as u16])
+        {
+            p.extend_from_slice(&n.to_be_bytes());
+        }
+        p.extend_from_slice(&self.rollback_count.to_be_bytes());
+        p.extend_from_slice(&self.sequence.to_be_bytes());
+        p
+    }
+    fn handle(&mut self, action: u8, p: &[u8], fail_trial: bool) -> Result<Vec<u8>, u8> {
+        self.tick();
+        self.actions.push(action);
+        let w = |i| u16::from_be_bytes([p[i], p[i + 1]]);
+        match action {
+            0 if p.is_empty() => {}
+            1 if p.len() == 8
+                && p[0] < 2
+                && p[0] != self.running
+                && self.trial == 0
+                && self.upload_slot.is_none() =>
+            {
+                self.failed = false;
+                self.upload_slot = Some(p[0]);
+                self.expected = w(2) as usize;
+                self.expected_crc = w(4);
+                self.new_version = w(6);
+                self.data.clear();
+                self.lengths[p[0] as usize] = 0;
+                self.previous = None;
+                self.sequence += 1;
+            }
+            2 if p.len() >= 6
+                && self.upload_slot.is_some()
+                && w(0) as usize == self.data.len()
+                && self.data.len() + p.len() - 2 <= self.expected =>
+            {
+                self.data.extend_from_slice(&p[2..])
+            }
+            3 if p.is_empty()
+                && self.upload_slot.is_some()
+                && self.data.len() == self.expected
+                && crc16(&self.data) == self.expected_crc =>
+            {
+                let slot = self.upload_slot.take().unwrap();
+                self.lengths[slot as usize] = self.expected as u16;
+                self.crcs[slot as usize] = self.expected_crc;
+                self.versions[slot as usize] = self.new_version;
+                if fail_trial {
+                    self.rollback_count += 1;
+                    self.candidate = None;
+                    self.trial = 0;
+                } else {
+                    self.candidate = Some(slot);
+                    self.running = slot;
+                    self.trial = 2;
+                    self.trial_since = Some(Instant::now());
+                }
+                self.sequence += 1;
+            }
+            4 if p.is_empty() && self.trial != 2 => {
+                self.failed = false;
+                self.upload_slot = None;
+                self.data.clear();
+                self.expected = 0;
+                self.trial = 0;
+                self.candidate = None;
+            }
+            5 if p.is_empty() && self.previous.is_some() && self.trial == 0 => {
+                self.candidate = self.previous;
+                self.running = self.previous.unwrap();
+                self.trial = 2;
+                self.trial_since = Some(Instant::now());
+            }
+            6 if p.is_empty() && self.trial == 1 => {
+                self.running = self.candidate.unwrap();
+                self.trial = 2;
+                self.trial_since = Some(Instant::now());
+            }
+            7 if p.is_empty() && self.candidate == Some(self.running) && self.trial == 2 => {
+                self.previous = Some(self.confirmed);
+                self.confirmed = self.running;
+                self.candidate = None;
+                self.trial = 0;
+                self.trial_since = None;
+                self.sequence += 1;
+            }
+            _ => return Err(6),
+        }
+        Ok(self.state())
+    }
 }
 
 #[derive(Debug)]
@@ -76,6 +252,8 @@ pub struct SimState {
     crc_errors: u16,
     exceptions: u16,
     pub reset_reason: u16,
+    pub firmware: Option<FirmwareSim>,
+    firmware_wait_reads: u32,
 }
 
 impl SimState {
@@ -101,6 +279,8 @@ impl SimState {
             crc_errors: 0,
             exceptions: 0,
             reset_reason: 1,
+            firmware: None,
+            firmware_wait_reads: 0,
         }
     }
     /// Simulates a restart: outputs OFF, counters and uptime reset.
@@ -110,12 +290,18 @@ impl SimState {
         self.inject = inject;
         self.reset_reason = reason;
     }
+    pub fn enable_ab(&mut self) {
+        self.firmware = Some(FirmwareSim::default());
+    }
     pub fn uptime_s(&self) -> u32 {
         self.boot.elapsed().as_secs() as u32
     }
     /// Advances the command state machine to `now`.
     fn tick(&mut self) {
         let now = Instant::now();
+        if let Some(fw) = &mut self.firmware {
+            fw.tick();
+        }
         if self.output {
             self.vout_mv = self.cfg.vin_mv;
         }
@@ -208,6 +394,8 @@ impl SimState {
     }
     fn status_regs(&mut self) -> Vec<u16> {
         self.tick();
+        let settling = self.firmware_wait_reads > 0;
+        self.firmware_wait_reads = self.firmware_wait_reads.saturating_sub(1);
         let mut f = 0;
         if self.output {
             f |= flags::OUTPUT;
@@ -218,7 +406,7 @@ impl SimState {
         if self.busy {
             f |= flags::BUSY;
         }
-        if !self.inject.vin_invalid {
+        if !self.inject.vin_invalid && !settling {
             f |= flags::VIN_VALID;
         }
         if !self.inject.vout_invalid {
@@ -257,13 +445,19 @@ impl SimState {
                 vec![
                     0x0205,
                     1,
-                    0x0207,
+                    self.firmware
+                        .as_ref()
+                        .map_or(0x0207, |f| f.versions[f.running as usize]),
                     0x0300,
                     u16::from_be_bytes([u[0], u[1]]),
                     u16::from_be_bytes([u[2], u[3]]),
                     u16::from_be_bytes([u[4], u[5]]),
                     u16::from_be_bytes([u[6], u[7]]),
-                    0x03FF,
+                    if self.firmware.is_some() {
+                        0x0bff
+                    } else {
+                        0x03ff
+                    },
                 ]
             }
             0x0110..=0x011C => {
@@ -334,6 +528,61 @@ impl SimState {
         }
         self.valid_requests += 1;
         let fc = frame[1];
+        if fc == 0x49
+            && n >= 14
+            && frame[11] as usize + 14 == n
+            && let Some(firmware) = self.firmware.as_mut()
+        {
+            let action = frame[10];
+            let safe = self.firmware_wait_reads == 0
+                && self.power_state == 0
+                && !self.output
+                && !self.discharge
+                && !self.busy
+                && !self.inject.vin_invalid
+                && !self.inject.vout_invalid
+                && self.vout_mv <= 1000;
+            let response = if action != 0 && !safe {
+                Err(6)
+            } else if action == 2 && self.inject.fail_firmware_write {
+                firmware.failed = true;
+                Err(4)
+            } else {
+                firmware.handle(action, &frame[12..n - 2], self.inject.fail_firmware_trial)
+            };
+            if action == 2
+                && self
+                    .firmware
+                    .as_ref()
+                    .is_some_and(|fw| fw.data.len() == fw.expected && fw.upload_slot.is_some())
+            {
+                self.firmware_wait_reads = self.inject.firmware_settling_reads;
+            }
+            let mut out = vec![UNIT, 0x49];
+            out.extend_from_slice(&self.cfg.uid.0);
+            match response {
+                Ok(payload) => {
+                    out.extend_from_slice(&[action, 32]);
+                    out.extend_from_slice(&payload);
+                }
+                Err(code) => {
+                    out[1] |= 0x80;
+                    out.push(code);
+                }
+            }
+            return Some(with_crc(out));
+        }
+        if matches!(fc, 0x06 | 0x10)
+            && self
+                .firmware
+                .as_ref()
+                .is_some_and(|f| f.trial != 0 || f.upload_slot.is_some())
+        {
+            let mut out = vec![UNIT, fc | 0x80];
+            out.extend_from_slice(&self.cfg.uid.0);
+            out.push(6);
+            return Some(with_crc(out));
+        }
         let mut head = vec![UNIT, fc];
         head.extend_from_slice(&self.cfg.uid.0);
         let exception = |this: &mut Self, code: u8| {
@@ -402,6 +651,7 @@ pub fn request_len(buf: &[u8]) -> Option<usize> {
     match buf.get(1)? {
         0x03 | 0x04 | 0x06 => Some(16),
         0x10 => Some(43),
+        0x49 => buf.get(11).map(|n| 14 + *n as usize),
         _ => Some(1),
     }
 }
@@ -438,6 +688,18 @@ impl Responder {
             let Some(mut reply) = s.handle(&frame) else {
                 continue;
             };
+            if frame[1] == 0x04
+                && frame[10..14] == [0, 0, 0, 6]
+                && s.firmware.as_ref().is_some_and(|fw| fw.trial == 2)
+                && s.inject.drop_trial_status_replies > 0
+            {
+                s.inject.drop_trial_status_replies -= 1;
+                continue;
+            }
+            if frame[1] == 0x49 && s.inject.drop_update_ack == Some(frame[10]) {
+                s.inject.drop_update_ack = None;
+                continue;
+            }
             if frame[1] == 0x06 && s.inject.unplug_after_control {
                 s.inject.unplugged = true;
                 continue;
@@ -455,7 +717,17 @@ impl Responder {
                 let last = reply.len() - 1;
                 reply[last] ^= 0xFF;
             }
-            let at = Instant::now() + s.inject.delay_next.take().unwrap_or_default();
+            let delay = s
+                .inject
+                .delay_next
+                .take()
+                .or(if frame[1] == 0x49 && frame[10] == 2 {
+                    s.inject.firmware_write_delay
+                } else {
+                    None
+                })
+                .unwrap_or_default();
+            let at = Instant::now() + delay;
             self.queue.push_back((at, reply));
         }
     }
@@ -570,7 +842,11 @@ pub fn demo_link(path: &str) -> Option<SimLink> {
         .lock()
         .unwrap()
         .entry(path.to_string())
-        .or_insert_with(|| shared(demo_config(i)))
+        .or_insert_with(|| {
+            let s = shared(demo_config(i));
+            s.lock().unwrap().enable_ab();
+            s
+        })
         .clone();
     Some(SimLink::at(state, path))
 }
@@ -588,13 +864,18 @@ pub fn serve_tty(
     port.set_timeout(Duration::from_millis(1)).ok();
     let mut buf = [0u8; 256];
     while !stop.load(std::sync::atomic::Ordering::Relaxed) {
-        if let Ok(n) = port.read(&mut buf) {
-            responder.feed(&buf[..n]);
+        match port.read(&mut buf) {
+            Ok(n) if n > 0 => responder.feed(&buf[..n]),
+            // A closed peer can return immediately on macOS. Avoid spinning
+            // a whole CPU while the daemon releases/reopens the slave.
+            _ => std::thread::sleep(Duration::from_millis(1)),
         }
         let out = responder.due();
         if !out.is_empty() {
             let _ = port.write_all(&out);
-            let _ = port.flush();
+            // This FD is unbuffered. tcdrain (TTYPort::flush) may wait without
+            // a usable timeout when the client closes or stops reading; it must
+            // not block later simulated requests or fixture shutdown.
         }
     }
 }

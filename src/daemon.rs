@@ -4,7 +4,7 @@
 use crate::{
     config::Config,
     device::{ErrorKind, OpError},
-    home,
+    firmware, home,
     manager::{Job, Manager},
     mcp,
     observe::{Level, Limits, Recorder, now, read_log},
@@ -190,7 +190,10 @@ async fn serve(manager: Arc<Manager>, config: Config) -> Result<(), String> {
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 let quiet = unix_now().saturating_sub(app.last_activity.load(Ordering::SeqCst));
-                if app.manager.watchers.load(Ordering::SeqCst) == 0 && quiet >= idle {
+                if app.manager.watchers.load(Ordering::SeqCst) == 0
+                    && quiet >= idle
+                    && !app.manager.has_updates()
+                {
                     let _ = app.stopping.send(true);
                     break;
                 }
@@ -241,6 +244,14 @@ fn router(app: App) -> Router {
         .route("/v1/devices/{id}/power", post(device_power))
         .route("/v1/devices/{id}/cycle", post(device_cycle))
         .route("/v1/devices/{id}/nickname", put(device_nickname))
+        .route(
+            "/v1/devices/{id}/firmware",
+            get(device_firmware).post(device_firmware_update),
+        )
+        .route(
+            "/v1/devices/{id}/firmware/rollback",
+            post(device_firmware_rollback),
+        )
         .route("/v1/operations", get(operations))
         .route("/v1/faults", get(faults))
         .route("/v1/metrics", get(metrics))
@@ -255,6 +266,7 @@ fn router(app: App) -> Router {
         .route("/ui/login", get(ui_login))
         .route("/ui/", get(ui_index))
         .route("/ui/app.js", get(ui_js))
+        .route("/ui/i18n.js", get(ui_i18n))
         .route("/ui/app.css", get(ui_css))
         .layer(middleware::from_fn_with_state(app.clone(), guard))
         .with_state(app)
@@ -381,6 +393,46 @@ async fn device_diagnostics(
             .await?,
     ))
 }
+#[derive(Deserialize)]
+struct FirmwareBody {
+    #[serde(default)]
+    data: Option<Vec<u8>>,
+}
+async fn device_firmware(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    h: HeaderMap,
+) -> ApiResult {
+    Ok(Json(
+        app.manager
+            .call(target(&id), Job::FirmwareStatus, source(&h))
+            .await?,
+    ))
+}
+async fn device_firmware_update(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    h: HeaderMap,
+    Json(body): Json<FirmwareBody>,
+) -> ApiResult {
+    let job = match body.data {
+        Some(data) => Job::Firmware(firmware::Image::parse(&data)?),
+        None => Job::FirmwareOnline,
+    };
+    Ok(Json(app.manager.call(target(&id), job, source(&h)).await?))
+}
+async fn device_firmware_rollback(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    h: HeaderMap,
+) -> ApiResult {
+    Ok(Json(
+        app.manager
+            .call(target(&id), Job::FirmwareRollback, source(&h))
+            .await?,
+    ))
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PowerBody {
@@ -616,11 +668,16 @@ pub fn openapi_spec() -> Value {
             "/v1/devices/{id}/nickname": {"put": {"summary": "Set the persistent nickname (output must be OFF)", "parameters": [id],
                 "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["nickname"], "properties": {"nickname": {"type": "string", "maxLength": 24}}}}}},
                 "responses": ok("Verified nickname")}},
+            "/v1/devices/{id}/firmware": {
+                "get": {"summary": "Read USB firmware support and A/B boot state", "parameters": [id], "responses": ok("Firmware support and boot state")},
+                "post": {"summary": "Upload firmware, reconnect, verify and confirm the trial", "parameters": [id], "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["data"], "properties": {"data": {"type": "array", "maxItems": 524288, "items": {"type": "integer", "minimum": 0, "maximum": 255}}}}}}}, "responses": ok("Verified firmware result; a failed trial reports verified rollback")}
+            },
+            "/v1/devices/{id}/firmware/rollback": {"post": {"summary": "Trial-boot and verify the previous A/B image, then confirm rollback", "parameters": [id], "responses": ok("Verified rollback result")}},
             "/v1/operations": {"get": {"summary": "Operation journal", "parameters": [{"name": "device", "in": "query", "schema": {"type": "string"}}, {"name": "limit", "in": "query", "schema": {"type": "integer"}}], "responses": ok("Records")}},
             "/v1/faults": {"get": {"summary": "Faults since the process started (and conditions still active)", "parameters": [{"name": "device", "in": "query", "schema": {"type": "string"}}, {"name": "active", "in": "query", "schema": {"type": "boolean"}}], "responses": ok("Faults")}},
             "/v1/metrics": {"get": {"summary": "Per-device polling and link statistics", "responses": ok("Metrics")}},
             "/v1/trace": {"get": {"summary": "Serial transaction spans", "parameters": [{"name": "trace_id", "in": "query", "schema": {"type": "string"}}, {"name": "device", "in": "query", "schema": {"type": "string"}}], "responses": ok("Spans")}},
-            "/v1/events": {"get": {"summary": "Server-sent events: hello, device.added, device.removed, device.offline, device.online, device.locked, status, operation.started, operation.finished, fault.raised, fault.occurred, fault.cleared, lagged", "responses": {"200": {"description": "text/event-stream"}}}},
+            "/v1/events": {"get": {"summary": "Server-sent events: hello, device.added, device.removed, device.offline, device.online, device.locked, status, firmware.progress, operation.started, operation.finished, fault.raised, fault.occurred, fault.cleared, lagged", "responses": {"200": {"description": "text/event-stream"}}}},
             "/v1/devices/{id}/lock": {"post": {"summary": "Lock or unlock a device for every client (config.toml locks cannot be lifted)", "parameters": [id],
                 "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["locked"], "properties": {"locked": {"type": "boolean"}}}}}},
                 "responses": ok("Lock state")}},
@@ -716,6 +773,7 @@ async fn ui_login(State(app): State<App>, Query(q): Query<LoginQuery>) -> Respon
 
 const UI_HTML: &str = include_str!("../web/index.html");
 const UI_JS: &str = include_str!("../web/app.js");
+const UI_I18N: &str = include_str!("../web/i18n.js");
 const UI_CSS: &str = include_str!("../web/app.css");
 fn asset(body: &'static str, kind: &'static str) -> Response {
     (
@@ -738,6 +796,9 @@ async fn ui_index() -> Response {
 }
 async fn ui_js() -> Response {
     asset(UI_JS, "text/javascript; charset=utf-8")
+}
+async fn ui_i18n() -> Response {
+    asset(UI_I18N, "text/javascript; charset=utf-8")
 }
 async fn ui_css() -> Response {
     asset(UI_CSS, "text/css; charset=utf-8")

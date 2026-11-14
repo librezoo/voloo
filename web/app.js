@@ -4,6 +4,8 @@
 // Results are what the device confirmed; an unknown outcome is highlighted, never retried.
 'use strict';
 
+const { tr, localized } = VolooI18n;
+
 const HOLD_MS = 600;
 const HISTORY_MS = 60_000;
 
@@ -26,7 +28,7 @@ const ICON = {
   spin: '<svg class="spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 1-9 9"/></svg>',
 };
 
-const FAULT = {
+const FAULT = localized({
   DEV_DISCHARGE_TIMEOUT: 'Discharge timed out',
   DEV_MEASUREMENT_INVALID: 'Discharge stopped: output unreadable',
   DEV_INTERNAL_ERROR: 'Internal error',
@@ -44,12 +46,13 @@ const FAULT = {
   LINK_IDENTITY_MISMATCH: 'Identity mismatch',
   LINK_IO: 'Connection error',
   HOST_LOG_WRITE_FAILED: "Can't write logs",
-};
-const SOURCE = { ui: 'Web', cli: 'Terminal', mcp: 'AI agent', http: 'API', daemon: 'Voloo' };
-const DONE = { on: 'switched on', off: 'switched off', discharge: 'discharged', cycle: 'power-cycled', nickname: 'renamed' };
-const FAIL = { on: 'switch on', off: 'switch off', discharge: 'discharge', cycle: 'power-cycle', nickname: 'rename' };
+});
+const SOURCE = localized({ ui: 'Web', cli: 'Terminal', mcp: 'AI agent', http: 'API', daemon: 'Voloo' });
+const DONE = localized({ on: 'switched on', off: 'switched off', discharge: 'discharged', cycle: 'power-cycled', nickname: 'renamed', firmware_update: 'updated firmware', firmware_rollback: 'rolled back firmware' });
+const FAIL = localized({ on: 'switch on', off: 'switch off', discharge: 'discharge', cycle: 'power-cycle', nickname: 'rename', firmware_update: 'update firmware on', firmware_rollback: 'roll back firmware on' });
 const ACTION_STYLE = {
   on: ['var(--volt)', ICON.bolt], off: ['var(--text-2)', ICON.off], discharge: ['var(--apricot)', ICON.drain],
+  firmware_update: ['var(--sky)', ICON.cycle], firmware_rollback: ['var(--lilac)', ICON.cycle],
   cycle: ['var(--sky)', ICON.cycle], nickname: ['var(--lilac)', ICON.pencil],
 };
 
@@ -58,6 +61,8 @@ const state = {
   devices: new Map(), history: new Map(), pending: new Map(), unknown: new Map(),
   ops: [], faults: [], view: 'devices', feed: 'all', filter: '', live: false,
   sheet: null, cycleMs: 1000, cycleDischarge: true,
+  firmwareFiles: new Map(), firmwareMeta: new Map(), firmwareBoot: new Map(),
+  localPending: new Set(), lockPending: new Set(),
 };
 let signedOut = false;
 
@@ -89,18 +94,18 @@ const enc = encodeURIComponent;
 function ago(iso) {
   if (!iso) return '';
   const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
-  if (s < 5) return 'now';
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (s < 5) return tr('now');
+  if (s < 60) return tr`${s}s ago`;
+  if (s < 3600) return tr`${Math.floor(s / 60)}m ago`;
+  return new Date(iso).toLocaleTimeString(VolooI18n.language, { hour: 'numeric', minute: '2-digit' });
 }
-const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+const clock = (iso) => new Date(iso).toLocaleTimeString(VolooI18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 function dayLabel(iso) {
   const d = new Date(iso), today = new Date(), y = new Date();
   y.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString()) return 'Today';
-  if (d.toDateString() === y.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  if (d.toDateString() === today.toDateString()) return tr('Today');
+  if (d.toDateString() === y.toDateString()) return tr('Yesterday');
+  return d.toLocaleDateString(VolooI18n.language, { weekday: 'long', month: 'short', day: 'numeric' });
 }
 // Replace children only when the content changed, so buttons inside survive live updates.
 function setKeyed(el, key, build) {
@@ -119,7 +124,7 @@ async function api(method, path, body) {
     state.live = false;
     signedOut = true;
     render();
-    throw { code: 'unauthorized', message: 'This page is signed out. Run `voloo ui` again.' };
+    throw { code: 'unauthorized', message: tr('This page is signed out. Run `voloo ui` again.') };
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw data.error || { code: 'error', message: `HTTP ${res.status}` };
@@ -147,28 +152,29 @@ function visual(d) {
   const pending = state.pending.get(d.uid);
   if (!d.online) return 'offline';
   if (pending === 'discharge' || s.power_state === 'DISCHARGING') return 'discharge';
-  if (pending || s.busy || s.power_state === 'TURNING_ON') return 'busy';
+  if (firmwareActive(d) || pending || s.busy || s.power_state === 'TURNING_ON') return 'busy';
   if (state.unknown.has(d.uid) || activeFaults(d).some((f) => f.severity === 'error')) return 'fault';
   return s.output_enabled ? 'on' : 'off';
 }
 function chipText(d) {
   const s = d.status || {};
   const pending = state.pending.get(d.uid);
-  if (!d.online) return 'Offline';
-  if (pending) return { on: 'Switching on', off: 'Switching off', discharge: 'Discharging', cycle: 'Cycling', nickname: 'Renaming' }[pending] || 'Working';
-  if (s.power_state === 'TURNING_ON') return 'Switching on';
-  if (s.power_state === 'DISCHARGING') return 'Discharging';
-  if (s.busy) return 'Busy';
-  if (state.unknown.has(d.uid)) return 'Check state';
+  if (firmwareActive(d)) return firmwareStage(d.firmware.stage);
+  if (!d.online) return tr('Offline');
+  if (pending) return { on: tr('Switching on'), off: tr('Switching off'), discharge: tr('Discharging'), cycle: tr('Cycling'), nickname: tr('Renaming') }[pending] || tr('Working');
+  if (s.power_state === 'TURNING_ON') return tr('Switching on');
+  if (s.power_state === 'DISCHARGING') return tr('Discharging');
+  if (s.busy) return tr('Busy');
+  if (state.unknown.has(d.uid)) return tr('Check state');
   const f = activeFaults(d).find((x) => x.severity === 'error');
-  if (f) return 'Fault';
-  return s.output_enabled ? 'On' : 'Off';
+  if (f) return tr('Fault');
+  return s.output_enabled ? tr('On') : tr('Off');
 }
 function offlineReason(d) {
   const why = (d.faults || []).find((f) => f.active && ['LINK_UNPLUGGED', 'LINK_NO_RESPONSE', 'LINK_PORT_BUSY'].includes(f.code));
-  return why ? FAULT[why.code] : 'Not connected';
+  return why ? FAULT[why.code] : tr('Not connected');
 }
-const canAct = (d) => d.online && !d.locked && !state.pending.has(d.uid) && !(d.status && d.status.busy);
+const canAct = (d) => !!d && state.live && !signedOut && d.online && !!d.status && !d.locked && !state.lockPending.has(d.uid) && !state.unknown.has(d.uid) && !state.pending.has(d.uid) && !firmwareActive(d) && !d.status.busy;
 const isFullyOff = (d) => { const s = d.status || {}; return s.state_code === 0 && !s.output_enabled && !s.discharge_enabled && !s.busy; };
 
 function upsert(snapshot) {
@@ -187,6 +193,13 @@ function record(uid, s, at) {
 // ---------- hold to confirm ----------
 function holdable(btn, { onFire, hint }) {
   let timer = null, started = 0;
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+    btn.classList.remove('holding');
+  };
+  const controller = new AbortController();
+  btn.cancelHold = () => { cancel(); controller.abort(); };
   btn.style.setProperty('--hold', `${HOLD_MS}ms`); // CSSOM: allowed by the page's CSP
   const begin = (e) => {
     if (btn.disabled || timer || btn.classList.contains('working')) return;
@@ -197,10 +210,12 @@ function holdable(btn, { onFire, hint }) {
     e.preventDefault();
     e.stopPropagation();
     started = performance.now();
+    const caught = btn.dataset.caught;
     btn.classList.add('holding');
     timer = setTimeout(async () => {
       timer = null;
       btn.classList.remove('holding');
+      if (btn.disabled || !btn.isConnected || document.hidden || caught !== btn.dataset.caught) return;
       btn.classList.add('working', 'fired');
       setTimeout(() => btn.classList.remove('fired'), 700);
       try { await onFire(); } finally { btn.classList.remove('working'); }
@@ -216,8 +231,11 @@ function holdable(btn, { onFire, hint }) {
   };
   btn.addEventListener('pointerdown', begin);
   btn.addEventListener('pointerup', end);
-  btn.addEventListener('pointercancel', end);
-  btn.addEventListener('lostpointercapture', end);
+  btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('lostpointercapture', cancel);
+  btn.addEventListener('blur', cancel);
+  window.addEventListener('blur', cancel, { signal: controller.signal });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); }, { signal: controller.signal });
   btn.addEventListener('click', (e) => e.stopPropagation());
   btn.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) begin(e); });
   btn.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') end(e); });
@@ -238,29 +256,79 @@ function relabel(btn, text) {
   clearTimeout(btn._relabel);
   btn._relabel = setTimeout(() => { sub.textContent = sub.dataset.text; delete sub.dataset.text; }, 1600);
 }
-const holdHint = (d) => (d && d.status && d.status.output_enabled ? 'Hold to switch off' : 'Hold to switch on');
+const holdHint = (d) => (d && d.status && d.status.output_enabled ? tr('Hold to switch off') : tr('Hold to switch on'));
+
+const firmwareActive = (d) => !!d?.firmware && !['completed', 'failed', 'rolled_back'].includes(d.firmware.stage);
+const firmwareReady = (d) => canAct(d) && isFullyOff(d) && d.status.vin_valid && d.status.vout_valid && Number.isFinite(d.status.vout_mv) && d.status.vout_mv <= 1000;
+const firmwareOnlineReady = (d) => !!(d?.identity?.capabilities & 0x1000) && state.firmwareBoot.get(d.uid)?.encrypted === true && state.firmwareBoot.get(d.uid)?.protection_flags === 14;
+const firmwareStage = (stage) => tr({ checking: 'Checking firmware', downloading: 'Downloading encrypted firmware', entering_update_mode: 'Entering update mode', installing_ab: 'Installing A/B support', uploading: 'Uploading firmware', reconnecting: 'Reconnecting', verifying: 'Verifying firmware', confirming: 'Confirming firmware', waiting_for_rollback: 'Waiting for automatic rollback', rolled_back: 'Previous firmware restored', completed: 'Firmware verified', failed: 'Firmware maintenance failed' }[stage] || 'Working');
+const firmwareVersion = (n) => Number.isInteger(n) ? `${n >> 8}.${n & 255}` : '—';
+async function refreshFirmware(uid) {
+  try { const r = await api('GET', `/v1/devices/${enc(uid)}/firmware`); state.firmwareBoot.set(uid, r.ab); render(); }
+  catch { /* The maintenance worker owns this device until verification finishes. */ }
+}
+async function updateFirmware(d, rollback = false) {
+  if (!firmwareReady(d)) return;
+  let body = {};
+  if (!rollback) {
+    const file = state.firmwareFiles.get(d.uid);
+    if (!file) {
+      if (!firmwareOnlineReady(d)) return;
+    } else {
+      if (file.size > 512 * 1024 || !file.size) return;
+      const data = Array.from(new Uint8Array(await file.arrayBuffer()));
+      if (state.firmwareFiles.get(d.uid) !== file || !firmwareReady(state.devices.get(d.uid))) return;
+      body = { data };
+    }
+  }
+  await act(d, rollback ? 'firmware_rollback' : 'firmware_update', 'POST', `/v1/devices/${enc(d.uid)}/firmware${rollback ? '/rollback' : ''}`, body);
+  refreshFirmware(d.uid);
+}
 
 // ---------- actions ----------
 async function act(d, action, method, path, body) {
+  // Recheck at the end of a hold: a live update may have locked or disconnected it.
+  if (!canAct(d) || (action === 'nickname' && !isFullyOff(d)) || (action.startsWith('firmware_') && !firmwareReady(d))) return;
   const name = nameOf(d);
+  state.localPending.add(d.uid);
   state.pending.set(d.uid, action);
   state.unknown.delete(d.uid);
   render();
   try {
     const r = await api(method, path, body);
-    let title = `${name} ${DONE[action]}`;
-    if (r.outcome === 'already_satisfied') title = `${name} was already ${action === 'discharge' ? 'discharged' : action}`;
+    const current = state.devices.get(d.uid);
+    if (current && action === 'nickname') current.nickname = r.nickname ?? body.nickname;
+    if (current && action.startsWith('firmware_')) {
+      current.identity = r.identity || current.identity;
+      current.firmware = { stage: 'completed', percent: 100 };
+      state.firmwareFiles.delete(d.uid); state.firmwareMeta.delete(d.uid);
+      if (r.boot) state.firmwareBoot.set(d.uid, r.boot);
+    }
+    const status = r.status || r.on?.status;
+    if (current && status) upsert({ uid: d.uid, status, observed_at: new Date().toISOString() });
+    let title = action.startsWith('firmware_') ? tr('Firmware verified') : tr`${name} ${DONE[action]}`;
+    if (r.outcome === 'already_satisfied') title = tr`${name} was already ${action === 'discharge' ? tr('discharged') : tr(action === 'on' ? 'On' : 'Off')}`;
     const vout = (r.status && r.status.vout_mv) ?? (r.on && r.on.status && r.on.status.vout_mv);
     const extra = action === 'discharge' && vout != null ? ` · ${v2(vout)} V` : r.elapsed_ms ? ` · ${r.elapsed_ms} ms` : '';
     notify('ok', title + extra);
   } catch (e) {
-    if (e.code === 'unauthorized') return notify('bad', 'Signed out', e.message);
+    if (e.code === 'unauthorized') return notify('bad', tr('Signed out'), e.message);
+    // A lost HTTP reply does not cancel a device operation. Never silently retry it.
+    if (e instanceof TypeError) e = { code: 'unknown', message: tr('Connection lost. Read the device state before trying another action.') };
     if (e.code === 'unknown') state.unknown.set(d.uid, e.message);
+    const restored = e.details?.update?.outcome === 'rolled_back';
+    if (restored) {
+      const current = state.devices.get(d.uid);
+      if (current) { current.identity = e.details.update.identity || current.identity; current.firmware = { stage: 'rolled_back', percent: 100 }; }
+      if (e.details.update.boot) state.firmwareBoot.set(d.uid, e.details.update.boot);
+      if (e.details.last_observed_status) upsert({ uid: d.uid, status: e.details.last_observed_status, observed_at: new Date().toISOString() });
+    }
     const hint = (e.faults || []).filter((f) => f.active || !f.condition).map((f) => f.suggestion)[0];
-    notify(e.code === 'unknown' ? 'warn' : 'bad', e.code === 'unknown' ? `${name}: result unknown` : `Couldn't ${FAIL[action]} ${name}`, hint || e.message);
+    notify(restored || e.code === 'unknown' ? 'warn' : 'bad', restored ? tr('Previous firmware restored') : action.startsWith('firmware_') ? tr('Firmware maintenance failed') : e.code === 'unknown' ? tr`${name}: result unknown` : tr`Couldn't ${FAIL[action]} ${name}`, tr(hint || e.message));
     const tile = document.querySelector(`.tile[data-uid="${CSS.escape(d.uid)}"]`);
     if (tile) { tile.classList.remove('shake'); void tile.offsetWidth; tile.classList.add('shake'); }
   } finally {
+    state.localPending.delete(d.uid);
     state.pending.delete(d.uid);
     render();
   }
@@ -270,13 +338,29 @@ const toggle = (d) => d && power(d, d.status && d.status.output_enabled ? 'off' 
 const cycle = (d) => act(d, 'cycle', 'POST', `/v1/devices/${enc(d.uid)}/cycle`, { off_ms: state.cycleMs, discharge: state.cycleDischarge });
 const rename = (d, nickname) => act(d, 'nickname', 'PUT', `/v1/devices/${enc(d.uid)}/nickname`, { nickname });
 async function setLock(d, locked) {
+  if (!state.live || signedOut || state.lockPending.has(d.uid)) return;
+  state.lockPending.add(d.uid);
+  render();
   try {
     const r = await api('POST', `/v1/devices/${enc(d.uid)}/lock`, { locked });
     Object.assign(d, { locked: r.locked, lock_source: r.lock_source });
-    notify('ok', `${nameOf(d)} ${r.locked ? 'locked' : 'unlocked'}`, r.locked ? 'No app, script or agent can switch it until you unlock it.' : null);
+    notify('ok', tr`${nameOf(d)} ${r.locked ? tr('locked') : tr('unlocked')}`, r.locked ? tr('No app, script or agent can switch it until you unlock it.') : null);
   } catch (e) {
-    notify('bad', "Couldn't change the lock", e.message);
+    notify('bad', tr("Couldn't change the lock"), e.message);
   }
+  state.lockPending.delete(d.uid);
+  render();
+}
+
+async function checkState(uid) {
+  try {
+    // The status endpoint is /devices/{uid}; StatusReport flattens the status fields.
+    const report = await api('GET', `/v1/devices/${enc(uid)}`);
+    if (report.uid !== uid || typeof report.output_enabled !== 'boolean') throw new Error(tr('Invalid device state response'));
+    const d = state.devices.get(uid);
+    if (d) upsert({ uid, status: report, faults: report.faults || [], online: true, observed_at: report.observed_at });
+    state.unknown.delete(uid);
+  } catch (e) { notify('bad', tr('Could not read device state'), e.message); }
   render();
 }
 
@@ -341,16 +425,16 @@ function updateTile(t, d) {
   t.el.dataset.state = vis;
   t.glyphBtn.dataset.caught = String(!!s.output_enabled && d.online);
   t.glyphBtn.disabled = !canAct(d);
-  t.glyphBtn.setAttribute('aria-label', d.locked ? `${label} is locked` : `${holdHint(d)}: ${label}`);
-  t.glyphBtn.title = d.locked ? 'Locked — open to unlock' : holdHint(d);
+  t.glyphBtn.setAttribute('aria-label', d.locked ? tr`${label} is locked` : `${holdHint(d)}: ${label}`);
+  t.glyphBtn.title = d.locked ? tr('Locked — open to unlock') : holdHint(d);
   t.chip.replaceChildren(h('i'), chipText(d));
   t.nameText.textContent = label;
   t.nameText.classList.toggle('unnamed', !d.nickname);
-  t.open.setAttribute('aria-label', `${label}, ${chipText(d)}. Open details`);
+  t.open.setAttribute('aria-label', tr`${label}, ${chipText(d)}. Open details`);
 
   if (!d.online) t.big.replaceChildren('—');
   else if (s.vout_valid) t.big.replaceChildren(v3(s.vout_mv), h('small', {}, 'V'));
-  else t.big.replaceChildren('Unreadable');
+  else t.big.replaceChildren(tr('Unreadable'));
   t.big.className = `big${d.online && !s.vout_valid ? ' invalid' : ''}`;
   t.vin.textContent = !d.online ? '—' : s.vin_valid ? `${v2(s.vin_mv)} V` : '—';
   t.scope.parentNode.hidden = !d.online;
@@ -358,15 +442,15 @@ function updateTile(t, d) {
 
   const faults = activeFaults(d);
   const flags = [];
-  if (d.locked) flags.push(h('span', { class: 'flag-lock', title: d.lock_source === 'config' ? 'Locked in config.toml' : 'Locked', html: ICON.lock }));
+  if (d.locked) flags.push(h('span', { class: 'flag-lock', title: d.lock_source === 'config' ? tr('Locked in config.toml') : tr('Locked'), html: ICON.lock }));
   if (faults.length) flags.push(h('span', { class: faults.some((f) => f.severity === 'error') ? 'flag-bad' : 'flag-warn', title: faults.map((f) => FAULT[f.code] || f.code).join(', '), html: ICON.warn }));
   t.flags.replaceChildren(...flags);
 
   let note = '', cls = '';
-  if (state.unknown.has(d.uid)) { note = 'Result unknown — check before acting'; cls = 'bad'; }
-  else if (!d.online) { note = `${offlineReason(d)} · output keeps its last state`; cls = 'quiet'; }
+  if (state.unknown.has(d.uid)) { note = tr('Result unknown — check before acting'); cls = 'bad'; }
+  else if (!d.online) { note = tr`${offlineReason(d)} · output keeps its last state`; cls = 'quiet'; }
   else if (faults.length) { note = FAULT[faults[0].code] || faults[0].code; cls = faults[0].severity === 'error' ? 'bad' : ''; }
-  else if (!s.output_enabled && !s.busy && s.vout_valid && s.vout_mv > 1000) note = `Load still holds ${v2(s.vout_mv)} V`;
+  else if (!s.output_enabled && !s.busy && s.vout_valid && s.vout_mv > 1000) note = tr`Load still holds ${v2(s.vout_mv)} V`;
   t.note.textContent = note;
   t.note.className = `tile-note ${cls}`;
   t.note.hidden = !note;
@@ -376,13 +460,16 @@ function updateTile(t, d) {
 function openSheet(uid) {
   const dlg = $('sheet');
   if (state.sheet && state.sheet.uid === uid && dlg.open) return;
+  cancelHolds(dlg);
   state.sheet = makeSheet(uid);
   dlg.replaceChildren(state.sheet.root);
   if (!dlg.open) dlg.showModal();
   state.sheet.update(state.devices.get(uid));
   state.sheet.close.focus();
+  refreshFirmware(uid);
 }
-const closeSheet = () => { const dlg = $('sheet'); if (dlg.open) dlg.close(); };
+function cancelHolds(root) { root.querySelectorAll('button').forEach((b) => b.cancelHold?.()); }
+const closeSheet = () => { const dlg = $('sheet'); cancelHolds(dlg); if (dlg.open) dlg.close(); };
 
 function holdButton(cls, label, sub) {
   return h('button', { class: `hold-btn ${cls}` }, h('span', { class: 'fill' }), h('span', { class: 'label' }, label, h('span', { class: 'sub' }, sub)), h('span', { class: 'kicker' }));
@@ -392,47 +479,69 @@ function makeSheet(uid) {
   const sheet = { uid, editing: false, hoverX: null };
   const current = () => state.devices.get(uid);
   const glyphBtn = h('button', { class: 'glyph-btn', html: `${GLYPH}<span class="ripple"></span>` });
-  const nameInput = h('input', { type: 'text', maxlength: '64', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Name', id: 'sheet-name' });
+  const nameInput = h('input', { type: 'text', maxlength: '64', autocomplete: 'off', spellcheck: 'false', 'aria-label': tr('Name'), id: 'sheet-name' });
   const sub = h('div', { class: 'sub' });
-  const close = h('button', { class: 'close', 'aria-label': 'Close', html: ICON.x, onclick: closeSheet });
+  const close = h('button', { class: 'close', 'aria-label': tr('Close'), html: ICON.x, onclick: closeSheet });
   const renameBar = h('div', { class: 'rename-bar', hidden: true });
   const callouts = h('div');
   const hero = h('div', { class: 'hero' });
   const chart = h('div', { class: 'chart' });
-  const primary = holdButton('primary', 'Switch On', 'Hold to confirm');
-  const discharge = holdButton('btn-discharge', 'Discharge', 'Off, then drain ≤ 1 V');
-  const cycleBtn = holdButton('btn-cycle', 'Power Cycle', '');
-  const cycleSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Off for' });
+  const primary = holdButton('primary', tr('Switch On'), tr('Hold to confirm'));
+  const discharge = holdButton('btn-discharge', tr('Discharge'), tr('Off, then drain ≤ 1 V'));
+  const cycleBtn = holdButton('btn-cycle', tr('Power Cycle'), '');
+  const cycleSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': tr('Off for') });
   for (const ms of [500, 1000, 2000, 5000, 10000]) {
     cycleSeg.append(h('button', { role: 'radio', 'data-ms': ms, onclick: () => { state.cycleMs = ms; sheet.update(current()); } }, ms < 1000 ? '0.5 s' : `${ms / 1000} s`));
   }
-  const dischargeFirst = h('input', { type: 'checkbox', role: 'switch', 'aria-label': 'Discharge before waiting', onchange: (e) => { state.cycleDischarge = e.target.checked; sheet.update(current()); } });
-  const lockSwitch = h('input', { type: 'checkbox', role: 'switch', 'aria-label': 'Allow changes', onchange: (e) => { const d = current(); if (d) setLock(d, !e.target.checked); } });
+  const dischargeFirst = h('input', { type: 'checkbox', role: 'switch', 'aria-label': tr('Discharge before waiting'), onchange: (e) => { state.cycleDischarge = e.target.checked; sheet.update(current()); } });
+  const lockSwitch = h('input', { type: 'checkbox', role: 'switch', 'aria-label': tr('Allow changes'), onchange: (e) => { const d = current(); if (d) setLock(d, !e.target.checked); } });
   const lockDesc = h('span', { class: 'desc' });
-  const faultsTitle = h('div', { class: 'group-title' }, micro('Needs attention'));
+  const faultsTitle = h('div', { class: 'group-title' }, micro(tr('Needs attention')));
   const faultsGroup = h('div', { class: 'group' });
-  const info = h('div', { class: 'group' });
-  const recentTitle = h('div', { class: 'group-title' }, micro('Recent activity'));
+  const info = h('div', { class: 'group device-info' });
+  const firmwareFile = h('input', { type: 'file', accept: '.voloofw,.bin', hidden: true, class: 'firmware-file' });
+  const firmwareChoose = h('button', { class: 'pill-btn firmware-select', 'aria-label': tr('Firmware file'), onclick: () => firmwareFile.click() }, tr('Choose a local firmware file'));
+  const firmwareNote = h('p', { class: 'firmware-note' });
+  const firmwareTarget = h('p', { class: 'firmware-target' });
+  const firmwarePrevious = h('p', { class: 'firmware-note' });
+  const firmwareProgress = h('progress', { max: '100', value: '0', 'aria-label': tr('Firmware progress') });
+  const firmwareState = h('p', { class: 'firmware-state', role: 'status', 'aria-live': 'polite' });
+  const firmwareStart = holdButton('btn-firmware', tr('Update firmware'), tr('Hold to confirm'));
+  const firmwareRollback = holdButton('btn-firmware', tr('Roll back firmware'), tr('Hold to confirm'));
+  const firmwareGroup = h('div', { class: 'group firmware-group' }, firmwareChoose, firmwareFile, firmwareTarget, firmwareNote, firmwarePrevious, firmwareProgress, firmwareState, h('div', { class: 'firmware-buttons' }, firmwareStart, firmwareRollback));
+  firmwareFile.addEventListener('change', async () => {
+    const file = firmwareFile.files?.[0];
+    state.firmwareFiles.delete(uid); state.firmwareMeta.delete(uid);
+    if (file && (!file.size || file.size > 512 * 1024)) { notify('bad', tr('Invalid firmware file'), tr('Choose a firmware file up to 512 KiB.')); }
+    else if (file) {
+      state.firmwareFiles.set(uid, file);
+      try { const pkg = JSON.parse(await file.text()); if (state.firmwareFiles.get(uid) === file && Number.isInteger(pkg.firmware_version)) state.firmwareMeta.set(uid, pkg.firmware_version); } catch { /* Legacy BIN: the server validates its target marker. */ }
+    }
+    sheet.update(current());
+  });
+  holdable(firmwareStart, { onFire: () => updateFirmware(current()), hint: (b) => relabel(b, tr('Keep holding…')) });
+  holdable(firmwareRollback, { onFire: () => updateFirmware(current(), true), hint: (b) => relabel(b, tr('Keep holding…')) });
+  const recentTitle = h('div', { class: 'group-title' }, micro(tr('Recent activity')));
   const recent = h('div', { class: 'group' });
 
   const root = h('div', { class: 'sheet-scroll' },
     h('div', { class: 'sheet-head' }, glyphBtn, h('div', { class: 'name-field' }, nameInput, sub), close),
     renameBar, callouts, hero, chart,
     h('div', { class: 'actions' }, primary, h('div', { class: 'row2' }, discharge, cycleBtn)),
-    h('div', { class: 'group-title' }, micro('Power cycle')),
+    h('div', { class: 'group-title' }, micro(tr('Power cycle'))),
     h('div', { class: 'group' },
-      h('div', { class: 'field' }, micro('Off for'), cycleSeg),
-      h('div', { class: 'item' }, h('span', { class: 'k' }, h('b', {}, 'Discharge before waiting'), h('span', { class: 'desc' }, 'Wait only once VOUT ≤ 1 V is confirmed')), h('label', { class: 'switch' }, dischargeFirst))),
+      h('div', { class: 'field' }, micro(tr('Off for')), cycleSeg),
+      h('div', { class: 'item' }, h('span', { class: 'k' }, h('b', {}, tr('Discharge before waiting')), h('span', { class: 'desc' }, tr('Wait only once VOUT ≤ 1 V is confirmed'))), h('label', { class: 'switch' }, dischargeFirst))),
     faultsTitle, faultsGroup,
-    h('div', { class: 'group-title' }, micro('Access')),
-    h('div', { class: 'group' }, h('div', { class: 'item' }, h('span', { class: 'k' }, h('b', {}, 'Allow changes'), lockDesc), h('label', { class: 'switch' }, lockSwitch))),
-    h('div', { class: 'group-title' }, micro('Device')),
-    info, recentTitle, recent);
+    h('div', { class: 'group-title' }, micro(tr('Access'))),
+    h('div', { class: 'group' }, h('div', { class: 'item' }, h('span', { class: 'k' }, h('b', {}, tr('Allow changes')), lockDesc), h('label', { class: 'switch' }, lockSwitch))),
+    h('div', { class: 'group-title' }, micro(tr('Device'))),
+    info, h('div', { class: 'group-title' }, micro(tr('USB firmware'))), firmwareGroup, recentTitle, recent);
 
   holdable(glyphBtn, { onFire: () => toggle(current()), hint: (b) => bubble(b, holdHint(current())) });
-  holdable(primary, { onFire: () => toggle(current()), hint: (b) => relabel(b, 'Keep holding…') });
-  holdable(discharge, { onFire: () => { const d = current(); return d && power(d, 'discharge'); }, hint: (b) => relabel(b, 'Keep holding…') });
-  holdable(cycleBtn, { onFire: () => { const d = current(); return d && cycle(d); }, hint: (b) => relabel(b, 'Keep holding…') });
+  holdable(primary, { onFire: () => toggle(current()), hint: (b) => relabel(b, tr('Keep holding…')) });
+  holdable(discharge, { onFire: () => { const d = current(); return d && power(d, 'discharge'); }, hint: (b) => relabel(b, tr('Keep holding…')) });
+  holdable(cycleBtn, { onFire: () => { const d = current(); return d && cycle(d); }, hint: (b) => relabel(b, tr('Keep holding…')) });
 
   // Rename in place; needs the output fully off.
   const bytes = (s) => new TextEncoder().encode(s).length;
@@ -442,13 +551,13 @@ function makeSheet(uid) {
     const n = bytes(nameInput.value);
     sheet.editing = changed;
     renameBar.hidden = !changed;
-    renameBar.replaceChildren(
-      h('button', { class: 'pill-btn primary', disabled: n > 24, onclick: saveName }, 'Save'),
-      h('button', { class: 'pill-btn', onclick: cancelName }, 'Cancel'),
-      h('span', {}, n > 24 ? `${n}/24 bytes · too long` : `Stored on the device · ${n}/24 bytes`));
+    setKeyed(renameBar, `${n}|${canAct(d)}|${isFullyOff(d)}|${VolooI18n.language}`, () => [
+      h('button', { class: 'pill-btn primary', disabled: n > 24 || !canAct(d) || !isFullyOff(d), onclick: saveName }, tr('Save')),
+      h('button', { class: 'pill-btn', onclick: cancelName }, tr('Cancel')),
+      h('span', {}, n > 24 ? tr`${n}/24 bytes · too long` : tr`Stored on the device · ${n}/24 bytes`)]);
   };
   const saveName = () => {
-    if (bytes(nameInput.value) > 24) return;
+    if (bytes(nameInput.value) > 24 || !canAct(current()) || !isFullyOff(current())) return;
     sheet.editing = false;
     renameBar.hidden = true;
     nameInput.blur();
@@ -462,6 +571,7 @@ function makeSheet(uid) {
   };
   nameInput.addEventListener('input', showRename);
   nameInput.addEventListener('keydown', (e) => {
+    if (e.isComposing) return;
     if (e.key === 'Enter') { e.preventDefault(); if (sheet.editing) saveName(); }
     if (e.key === 'Escape' && sheet.editing) { e.preventDefault(); e.stopPropagation(); cancelName(); }
   });
@@ -480,47 +590,49 @@ function makeSheet(uid) {
     const label = nameOf(d);
     const vis = visual(d);
     root.dataset.state = vis;
-    const offOk = d.online && isFullyOff(d) && !d.locked && !state.pending.has(uid);
+    const offOk = canAct(d) && isFullyOff(d);
+    if (sheet.editing) showRename();
     if (!sheet.editing) nameInput.value = d.nickname || '';
     nameInput.placeholder = label;
     nameInput.disabled = !offOk;
-    nameInput.title = offOk ? 'Click to rename' : d.locked ? 'Unlock to rename' : 'Switch off to rename';
-    sub.replaceChildren(...[h('span', { class: 'chip' }, h('i'), chipText(d)), d.locked ? h('span', { class: 'chip lock-chip' }, h('span', { class: 'flag-lock', html: ICON.lock }), 'Locked') : null, micro(d.uid)].filter(Boolean));
+    nameInput.title = offOk ? tr('Click to rename') : d.locked ? tr('Unlock to rename') : tr('Switch off to rename');
+    sub.replaceChildren(...[h('span', { class: 'chip' }, h('i'), chipText(d)), d.locked ? h('span', { class: 'chip lock-chip' }, h('span', { class: 'flag-lock', html: ICON.lock }), tr('Locked')) : null, micro(d.uid)].filter(Boolean));
     glyphBtn.dataset.caught = String(!!s.output_enabled && d.online);
     glyphBtn.disabled = !canAct(d);
     glyphBtn.setAttribute('aria-label', `${holdHint(d)}: ${label}`);
 
     const items = [];
     if (state.unknown.has(uid)) items.push(h('div', { class: 'callout bad', html: ICON.warn },
-      h('span', {}, h('b', {}, 'Result unknown. '), state.unknown.get(uid), ' The reading below is fresh — check it before doing anything else.'),
-      h('button', { class: 'x', onclick: () => { state.unknown.delete(uid); render(); } }, 'OK')));
-    if (!d.online) items.push(h('div', { class: 'callout warn', html: ICON.info }, h('span', {}, h('b', {}, `${offlineReason(d)}. `), 'The output keeps whatever state it had, which is unknown from here. Reconnect the USB cable.')));
-    if (d.online && !s.output_enabled && !s.busy && s.vout_valid && s.vout_mv > 1000) items.push(h('div', { class: 'callout warn', html: ICON.info }, h('span', {}, h('b', {}, `The load still holds ${v2(s.vout_mv)} V. `), 'Switching off does not drain it — hold Discharge to bring it to ≤ 1 V.')));
-    setKeyed(callouts, items.map((x) => x.textContent).join('|'), () => items);
+      h('span', {}, h('b', {}, tr('Result unknown. ')), state.unknown.get(uid), tr(' Read the device state before doing anything else.')),
+      h('button', { class: 'x', disabled: !state.live || state.pending.has(uid), onclick: () => checkState(uid) }, tr('Check state'))));
+    if (!d.online && !firmwareActive(d)) items.push(h('div', { class: 'callout warn', html: ICON.info }, h('span', {}, h('b', {}, `${offlineReason(d)}. `), tr('The output keeps whatever state it had, which is unknown from here. Reconnect the USB cable.'))));
+    if (d.online && !s.output_enabled && !s.busy && s.vout_valid && s.vout_mv > 1000) items.push(h('div', { class: 'callout warn', html: ICON.info }, h('span', {}, h('b', {}, tr`The load still holds ${v2(s.vout_mv)} V. `), tr('Switching off does not drain it — hold Discharge to bring it to ≤ 1 V.'))));
+    setKeyed(callouts, `${state.live}|${state.pending.has(uid)}|` + items.map((x) => x.textContent).join('|'), () => items);
 
     const reading = (cls, tag, sublabel, mv, valid, digits) => h('div', { class: cls },
       h('div', { class: 'label' }, micro(tag), micro(sublabel)),
       !d.online ? h('div', { class: 'value invalid' }, '—')
         : valid ? h('div', { class: 'value' }, digits(mv), h('small', {}, 'V'))
-          : h('div', { class: 'value invalid', title: 'Invalid reading — not zero volts' }, 'Unreadable'));
+          : h('div', { class: 'value invalid', title: tr('Invalid reading — not zero volts') }, tr('Unreadable')));
     hero.replaceChildren(
-      reading('primary', 'VOUT', '· to load', s.vout_mv, s.vout_valid, v3),
-      reading('secondary', 'VIN', '· source', s.vin_mv, s.vin_valid, v2),
-      h('div', { class: 'when' }, micro(d.online ? `Sampled ${ago(d.observed_at)} · ${state.live ? 'live' : 'paused'}` : 'No live data')));
+      reading('primary', 'VOUT', tr('· to load'), s.vout_mv, s.vout_valid, v3),
+      reading('secondary', 'VIN', tr('· source'), s.vin_mv, s.vin_valid, v2),
+      h('div', { class: 'when' }, micro(d.online ? tr`Sampled ${ago(d.observed_at)} · ${state.live ? tr('live') : tr('paused')}` : tr('No live data'))));
     drawChart(chart, uid, sheet.hoverX);
 
     const can = canAct(d);
     primary.disabled = discharge.disabled = cycleBtn.disabled = !can;
     primary.classList.toggle('primary', !s.output_enabled);
     primary.classList.toggle('btn-off', !!s.output_enabled);
+    primary.dataset.caught = String(!!s.output_enabled);
     const pLabel = primary.querySelector('.label');
-    if (!primary.querySelector('.sub').dataset.text) pLabel.firstChild.textContent = s.output_enabled ? 'Switch Off' : 'Switch On';
-    cycleBtn.querySelector('.sub').dataset.text || (cycleBtn.querySelector('.sub').textContent = `${state.cycleDischarge ? 'Drain' : 'Off'} · ${state.cycleMs < 1000 ? '0.5' : state.cycleMs / 1000} s · on`);
+    if (!primary.querySelector('.sub').dataset.text) pLabel.firstChild.textContent = s.output_enabled ? tr('Switch Off') : tr('Switch On');
+    cycleBtn.querySelector('.sub').dataset.text || (cycleBtn.querySelector('.sub').textContent = tr`${state.cycleDischarge ? tr('Drain') : tr('Off')} · ${state.cycleMs < 1000 ? '0.5' : state.cycleMs / 1000} s · on`);
     for (const b of cycleSeg.children) b.setAttribute('aria-checked', String(Number(b.dataset.ms) === state.cycleMs));
     dischargeFirst.checked = state.cycleDischarge;
     lockSwitch.checked = !d.locked;
-    lockSwitch.disabled = d.lock_source === 'config';
-    lockDesc.textContent = d.lock_source === 'config' ? 'Locked in config.toml' : d.locked ? 'Locked — no app, script or agent can switch or rename it' : 'Web, Terminal, AI agents and the API can switch it';
+    lockSwitch.disabled = !state.live || signedOut || state.lockPending.has(uid) || d.lock_source === 'config';
+    lockDesc.textContent = d.lock_source === 'config' ? tr('Locked in config.toml') : d.locked ? tr('Locked — no app, script or agent can switch or rename it') : tr('Web, Terminal, AI agents and the API can switch it');
 
     const shown = [...activeFaults(d), ...recentEvents(d)];
     faultsTitle.hidden = faultsGroup.hidden = !shown.length;
@@ -532,12 +644,32 @@ function makeSheet(uid) {
     const p50 = m.status_p50_us ? (m.status_p50_us / 1000).toFixed(2) : null;
     setKeyed(info, JSON.stringify([d.uid, d.port, id, p50]), () => [
       h('div', { class: 'item' }, h('span', { class: 'k' }, 'UID'), h('span', { class: 'v' }, d.uid),
-        h('button', { class: 'copy', onclick: () => navigator.clipboard && navigator.clipboard.writeText(d.uid).then(() => notify('ok', 'UID copied')) }, 'Copy')),
-      row('Port', d.port || '—'),
-      row('Firmware', id.firmware_version ? `${id.firmware_version} · protocol ${id.protocol_version}` : '—'),
-      row('Hardware', id.hardware_version || '—'),
-      row('Round trip', p50 ? `${p50} ms p50 · ${(m.status_p99_us / 1000).toFixed(2)} ms p99` : '—')]);
+      h('button', { class: 'copy', onclick: async () => {
+        try { await navigator.clipboard.writeText(d.uid); notify('ok', tr('UID copied')); }
+        catch { notify('bad', tr('Could not copy UID'), d.uid); }
+      } }, tr('Copy'))),
+      row(tr('Port'), d.port || '—'),
+      row(tr('Firmware'), id.firmware_version ? tr`${id.firmware_version} · protocol ${id.protocol_version}` : '—'),
+      row(tr('Hardware'), id.hardware_version || '—'),
+      row(tr('Round trip'), p50 ? `${p50} ms p50 · ${(m.status_p99_us / 1000).toFixed(2)} ms p99` : '—')]);
 
+    const supported = !!(id.capabilities & 0x1c00);
+    const file = state.firmwareFiles.get(uid);
+    if (!file) firmwareFile.value = '';
+    const boot = state.firmwareBoot.get(uid);
+    const previous = boot?.previous_slot == null ? null : boot.versions?.[boot.previous_slot];
+    firmwareFile.disabled = firmwareChoose.disabled = !can || !supported;
+    firmwareStart.disabled = !firmwareReady(d) || !supported || (!file && !firmwareOnlineReady(d));
+    firmwareRollback.disabled = !firmwareReady(d) || !(id.capabilities & 0x1800) || previous == null;
+    firmwareRollback.hidden = !(id.capabilities & 0x1800);
+    firmwareTarget.hidden = !file;
+    firmwarePrevious.hidden = !d.firmware || firmwareActive(d) || !(id.capabilities & 0x1800);
+    firmwarePrevious.textContent = !state.firmwareBoot.has(uid) ? tr('Checking firmware') : previous != null ? `${tr('Previous firmware')}: ${firmwareVersion(previous)}` : tr('No previous firmware is available.');
+    firmwareTarget.textContent = file ? `${file.name} · ${firmwareVersion(state.firmwareMeta.get(uid))}` : tr('Choose a local firmware file');
+    firmwareNote.textContent = !supported ? tr('This firmware does not support USB updates.') : !isFullyOff(d) || !s.vout_valid || s.vout_mv > 1000 ? tr('Switch off and confirm VOUT ≤ 1 V before updating.') : !file && !firmwareOnlineReady(d) ? tr('Online updates require trusted factory initialization and device protection.') : !(id.capabilities & 0x1800) && file?.name.endsWith('.voloofw') ? tr('First A/B installation replaces the boot program. Keep USB connected.') : !file && (id.capabilities & 0x1000) ? tr('Compatible encrypted firmware is downloaded temporarily, verified on the device, then removed.') : tr('The background service reconnects and verifies the device. Output stays off.');
+    firmwareProgress.hidden = !d.firmware;
+    firmwareProgress.value = d.firmware?.percent || 0;
+    firmwareState.textContent = d.firmware ? `${firmwareStage(d.firmware.stage)} · ${d.firmware.percent}%` : previous != null ? `${tr('Previous firmware')}: ${firmwareVersion(previous)}` : tr('No previous firmware is available.');
     const mine = state.ops.filter((o) => o.uid === uid).slice(0, 5);
     recentTitle.hidden = recent.hidden = !mine.length;
     setKeyed(recent, mine.map((o) => `${o.at}${o.action}${o.ok}${ago(o.at)}`).join('|'), () => mine.map(opRow));
@@ -546,7 +678,9 @@ function makeSheet(uid) {
 }
 
 function drawChart(box, uid, hoverX) {
-  const W = 540, H = 170, PL = 40, PR = 46, PT = 6, PB = 22;
+  // Keep chart labels at their intended size on narrow detail sheets. A fixed
+  // 540-wide viewBox shrinks the plot into the middle of a tall SVG on phones.
+  const W = Math.max(240, box.clientWidth - 8), H = 170, PL = 40, PR = 46, PT = 6, PB = 22;
   const IW = W - PL - PR;
   const g = scopeGeometry(uid, IW, H, PT, PB);
   const top = g.max / 1.12;
@@ -554,7 +688,7 @@ function drawChart(box, uid, hoverX) {
   const max = step * 2;
   const X = (t) => PL + (1 - (g.now - t) / HISTORY_MS) * IW;
   const Y = (mv) => PT + (1 - mv / max) * (H - PT - PB);
-  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Output voltage, last minute, 0 to ${max / 1000} V` });
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': tr`Output voltage, last minute, 0 to ${max / 1000} V` });
   const grid = svgEl('g', { class: 'grid' });
   const axis = svgEl('g', { class: 'axis' });
   for (let i = 0; i <= 4; i++) {
@@ -563,7 +697,7 @@ function drawChart(box, uid, hoverX) {
     if (i % 2 === 0) { const t = svgEl('text', { x: PL - 8, y: Y(mv) + 3.5, 'text-anchor': 'end' }); t.textContent = `${mv / 1000}V`; axis.append(t); }
   }
   for (let i = 0; i <= 6; i++) grid.append(svgEl('line', { x1: PL + (IW / 6) * i, x2: PL + (IW / 6) * i, y1: PT, y2: H - PB }));
-  for (const [frac, txt] of [[0, '-60s'], [0.5, '-30s'], [1, 'NOW']]) {
+  for (const [frac, txt] of [[0, '-60s'], [0.5, '-30s'], [1, tr('now')]]) {
     const t = svgEl('text', { x: PL + frac * IW, y: H - 5, 'text-anchor': frac === 0 ? 'start' : frac === 1 ? 'end' : 'middle' });
     t.textContent = txt;
     axis.append(t);
@@ -607,7 +741,7 @@ function drawChart(box, uid, hoverX) {
     svg.append(svgEl('line', { class: 'cross', x1: x, x2: x, y1: PT, y2: H - PB }));
     if (p.vout != null) svg.append(svgEl('circle', { class: 'dot', cx: x, cy: Y(p.vout), r: 5 }));
     const secs = Math.round((g.now - p.t) / 1000);
-    const tip = h('div', { class: 'tip' }, h('b', {}, p.vout == null ? 'Unreadable' : `${v3(p.vout)} V`), h('span', {}, `  VIN ${p.vin == null ? '—' : v2(p.vin)} · ${secs ? `${secs}s ago` : 'now'}`));
+    const tip = h('div', { class: 'tip' }, h('b', {}, p.vout == null ? tr('Unreadable') : `${v3(p.vout)} V`), h('span', {}, `  VIN ${p.vin == null ? '—' : v2(p.vin)} · ${secs ? tr`${secs}s ago` : tr('now')}`));
     tip.style.left = `${Math.min(84, Math.max(16, (x / W) * 100))}%`; // CSSOM, allowed by the CSP
     box.append(tip);
   }
@@ -621,18 +755,21 @@ function faultItem(f) {
   const ico = h('span', { class: 'badge-ico', html: f.severity === 'info' ? ICON.info : ICON.warn });
   ico.style.setProperty('--c', c);
   return h('div', { class: 'item' }, ico,
-    h('span', { class: 'k' }, h('b', {}, FAULT[f.code] || f.code), h('span', { class: 'desc' }, f.suggestion),
-      h('span', { class: 'code' }, `${f.code} · ${f.active ? 'since' : 'at'} ${ago(f.active ? f.first_seen : f.last_seen)}${f.count > 1 ? ` · ×${f.count}` : ''}`)));
+    h('span', { class: 'k' }, h('b', {}, FAULT[f.code] || f.code), h('span', { class: 'desc' }, tr(f.suggestion)),
+      h('span', { class: 'code' }, `${f.code} · ${f.active ? tr('since') : tr('at')} ${ago(f.active ? f.first_seen : f.last_seen)}${f.count > 1 ? ` · ×${f.count}` : ''}`)));
 }
 function opRow(o) {
   const d = state.devices.get(o.uid);
   const name = d ? nameOf(d) : o.uid;
   const failed = o.ok === false;
-  const [c, icon] = failed ? ['var(--coral)', ICON.x] : ACTION_STYLE[o.action] || ['var(--text-2)', ICON.off];
+  const restored = o.error?.details?.update?.outcome === 'rolled_back';
+  const [c, icon] = restored ? ['var(--apricot)', ICON.cycle] : failed ? ['var(--coral)', ICON.x] : ACTION_STYLE[o.action] || ['var(--text-2)', ICON.off];
   let title;
-  if (failed) title = o.error && o.error.code === 'unknown' ? `${name}: ${FAIL[o.action] || o.action} — result unknown` : `Couldn't ${FAIL[o.action] || o.action} ${name}`;
-  else if (o.outcome === 'already_satisfied') title = `${name} was already ${o.action === 'discharge' ? 'discharged' : o.action}`;
-  else title = `${name} ${DONE[o.action] || o.action}`;
+  if (restored) title = `${name} · ${tr('Previous firmware restored')}`;
+  else if (failed && o.action?.startsWith('firmware_')) title = o.error?.code === 'unknown' ? tr`${name}: result unknown` : `${name} · ${tr('Firmware maintenance failed')}`;
+  else if (failed) title = o.error && o.error.code === 'unknown' ? tr`${name}: ${FAIL[o.action] || o.action} — result unknown` : tr`Couldn't ${FAIL[o.action] || o.action} ${name}`;
+  else if (o.outcome === 'already_satisfied') title = tr`${name} was already ${o.action === 'discharge' ? tr('discharged') : tr(o.action === 'on' ? 'On' : 'Off')}`;
+  else title = tr`${name} ${DONE[o.action] || o.action}`;
   const ico = h('span', { class: 'badge-ico', html: icon });
   ico.style.setProperty('--c', c);
   return h('div', { class: 'item' }, ico,
@@ -641,16 +778,19 @@ function opRow(o) {
 }
 function faultRow(f) {
   const d = state.devices.get(f.uid);
-  const st = f.active ? ['active', 'Active'] : f.condition ? ['resolved', 'Resolved'] : ['event', 'Event'];
+  const st = f.active ? ['active', tr('Active')] : f.condition ? ['resolved', tr('Resolved')] : ['event', tr('Event')];
   const row = faultItem(f);
   row.querySelector('b').textContent = `${d ? nameOf(d) : f.uid || f.port || ''} · ${FAULT[f.code] || f.code}`;
-  row.append(h('span', { class: `state ${st[0]}` }, st[1]));
+  row.append(h('span', { class: `state ${st[0]}` }, tr(st[1])));
   return row;
 }
 function renderFeed() {
-  const items = state.feed === 'faults' ? state.faults.map((f) => ({ at: f.last_seen, row: faultRow(f) })) : state.ops.map((o) => ({ at: o.at, row: opRow(o) }));
+  const items = (state.feed === 'faults' ? state.faults.map((f) => ({ at: f.last_seen, row: faultRow(f) })) : [
+    ...state.ops.map((o) => ({ at: o.at, row: opRow(o) })),
+    ...state.faults.map((f) => ({ at: f.last_seen, row: faultRow(f) })),
+  ]).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   if (!items.length) {
-    $('feed').replaceChildren(h('div', { class: 'feed-empty' }, state.feed === 'faults' ? 'No faults. Everything is working.' : 'Nothing has happened yet.'));
+    $('feed').replaceChildren(h('div', { class: 'feed-empty' }, state.feed === 'faults' ? tr('No faults. Everything is working.') : tr('Nothing has happened yet.')));
     return;
   }
   const out = [];
@@ -673,7 +813,7 @@ function render() {
 function stat(color, value, label) {
   const i = h('i');
   if (color) i.style.setProperty('--c', color);
-  return h('span', { class: 'stat' }, i, h('b', {}, value), label);
+  return h('span', { class: 'stat' }, i, h('b', {}, value), tr(label));
 }
 function draw() {
   const all = [...state.devices.values()];
@@ -681,12 +821,12 @@ function draw() {
   const on = online.filter((d) => d.status && d.status.output_enabled);
   const attention = all.filter((d) => !d.online || activeFaults(d).length || state.unknown.has(d.uid));
   const pulse = h('span', { class: `pulse${state.live && !signedOut ? '' : ' down'}` });
-  $('subtitle').replaceChildren(pulse, signedOut ? 'Signed out — run voloo ui' : state.live ? 'Live · LibreZoo' : 'Reconnecting');
-  setKeyed($('strip'), `${all.length}|${online.length}|${on.length}|${attention.length}`, () => [
-    stat('var(--text-2)', all.length, all.length === 1 ? 'device' : 'devices'),
-    stat('var(--volt)', on.length, 'powered'),
+  $('subtitle').replaceChildren(pulse, signedOut ? tr('Signed out — run voloo ui') : state.live ? tr('Live · LibreZoo') : tr('Reconnecting'));
+  setKeyed($('strip'), `${VolooI18n.language}|${all.length}|${online.length}|${on.length}|${attention.length}`, () => [
+    stat('var(--text-2)', all.length, all.length === 1 ? tr('device') : 'devices'),
+    stat('var(--volt)', on.length, tr('powered')),
     stat('var(--off)', online.length - on.length, 'off'),
-    attention.length ? stat('var(--coral)', attention.length, 'need attention') : null,
+    attention.length ? stat('var(--coral)', attention.length, tr('need attention')) : null,
   ].filter(Boolean));
   const active = state.faults.filter((f) => f.active).length;
   $('badge').textContent = String(active);
@@ -701,15 +841,16 @@ function draw() {
   const list = all.filter((d) => !f || nameOf(d).toLowerCase().includes(f) || d.uid.toLowerCase().includes(f))
     .sort((a, b) => nameOf(a).localeCompare(nameOf(b), undefined, { numeric: true }));
   const box = $('tiles');
-  for (const [uid, t] of tiles) if (!state.devices.has(uid)) { t.el.remove(); tiles.delete(uid); }
+  for (const [uid, t] of tiles) if (!state.devices.has(uid)) { cancelHolds(t.el); t.el.remove(); tiles.delete(uid); }
   list.forEach((d, i) => {
     let t = tiles.get(d.uid);
     if (!t) { t = makeTile(d.uid); tiles.set(d.uid, t); }
     updateTile(t, d);
     if (box.children[i] !== t.el) box.insertBefore(t.el, box.children[i] || null);
   });
-  for (const [uid, t] of tiles) if (!list.some((d) => d.uid === uid) && t.el.parentNode) t.el.remove();
+  for (const [uid, t] of tiles) if (!list.some((d) => d.uid === uid) && t.el.parentNode) { t.glyphBtn.dispatchEvent(new Event('blur')); t.el.remove(); }
   $('empty').hidden = all.length > 0;
+  $('no-results').hidden = !all.length || !!list.length;
 
   if (state.view === 'activity') renderFeed();
   if (state.sheet && $('sheet').open) state.sheet.update(state.devices.get(state.sheet.uid));
@@ -719,7 +860,7 @@ function draw() {
 function normalizeOp(r) {
   if ('ok' in r) return { at: r.at, uid: r.uid, action: r.action, source: r.source, ok: r.ok, outcome: r.outcome, error: r.error || null };
   const failed = !!r.error;
-  return { at: r.at, uid: r.uid, action: r.action, source: r.source, ok: !failed, outcome: r.outcome, error: failed ? { code: r.outcome, message: r.error } : null };
+  return { at: r.at, uid: r.uid, action: r.action, source: r.source, ok: !failed, outcome: r.outcome, error: failed ? (typeof r.error === 'object' ? r.error : { code: r.outcome, message: r.error }) : null };
 }
 async function refresh() {
   const [devices, ops, faults] = await Promise.all([api('GET', '/v1/devices'), api('GET', '/v1/operations?limit=200'), api('GET', '/v1/faults?limit=300')]);
@@ -739,8 +880,19 @@ function connect() {
   const es = new EventSource('/v1/events');
   const on = (kind, fn) => es.addEventListener(kind, (e) => { fn(JSON.parse(e.data)); render(); });
   es.onopen = () => { state.live = true; render(); };
-  es.onerror = () => { state.live = false; render(); };
-  on('hello', (e) => e.devices.forEach(upsert));
+  es.onerror = () => {
+    state.live = false;
+    render();
+    // EventSource does not expose a 401. Probe through fetch and stop reconnecting
+    // when the browser session has expired.
+    api('GET', '/v1/devices').catch((e) => { if (e.code === 'unauthorized') es.close(); });
+  };
+  on('hello', (e) => {
+    state.devices.clear();
+    e.devices.forEach(upsert);
+    for (const uid of state.pending.keys()) if (!state.localPending.has(uid)) state.pending.delete(uid);
+    refresh().catch(() => {});
+  });
   for (const k of ['device.added', 'device.removed', 'device.offline', 'device.online']) on(k, (e) => upsert(e.data));
   on('status', (e) => {
     const d = state.devices.get(e.data.uid) || { uid: e.data.uid };
@@ -749,29 +901,63 @@ function connect() {
     record(d.uid, e.data.status, e.data.observed_at);
   });
   on('device.locked', (e) => { const d = state.devices.get(e.data.uid); if (d) Object.assign(d, e.data); });
+  on('firmware.progress', (e) => { const d = state.devices.get(e.data.uid); if (d) d.firmware = e.data.firmware; });
   on('operation.started', (e) => { if (!state.pending.has(e.data.uid)) state.pending.set(e.data.uid, e.data.action); });
   on('operation.finished', (e) => {
     const op = normalizeOp({ ...e.data, at: e.at });
     state.ops = [op, ...state.ops].slice(0, 300);
+    if (!state.localPending.has(op.uid)) state.pending.delete(op.uid);
+    if (op.action?.startsWith('firmware_')) refreshFirmware(op.uid);
+    if (op.ok === false && op.error && op.error.code === 'unknown') state.unknown.set(op.uid, op.error.message);
     if (op.source !== 'ui') {
-      state.pending.delete(op.uid);
-      if (op.ok === false && op.error && op.error.code === 'unknown') state.unknown.set(op.uid, op.error.message);
       const d = state.devices.get(op.uid);
-      if (d && op.ok) notify('ok', `${nameOf(d)} ${DONE[op.action] || op.action}`, `by ${SOURCE[op.source] || op.source}`);
+      if (d && op.ok) notify('ok', tr`${nameOf(d)} ${DONE[op.action] || op.action}`, tr`by ${SOURCE[op.source] || op.source}`);
     }
   });
   for (const k of ['fault.raised', 'fault.occurred', 'fault.cleared']) on(k, (e) => mergeFault(e.data));
   on('lagged', () => refresh().catch(() => {}));
 }
 
+function applyLanguage() {
+  document.documentElement.lang = VolooI18n.language;
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = tr(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', tr(el.dataset.i18nAria));
+  $('filter').placeholder = tr('Search');
+  $('language').value = VolooI18n.language;
+  if (state.sheet && $('sheet').open) {
+    const uid = state.sheet.uid;
+    const editing = state.sheet.editing;
+    const draft = $('sheet-name').value;
+    cancelHolds($('sheet'));
+    state.sheet = makeSheet(uid);
+    $('sheet').replaceChildren(state.sheet.root);
+    state.sheet.update(state.devices.get(uid));
+    if (editing) { $('sheet-name').value = draft; $('sheet-name').dispatchEvent(new Event('input')); }
+    state.sheet.close.focus();
+  }
+  render();
+}
+function applyTheme(theme) {
+  const value = ['light', 'dark'].includes(theme) ? theme : 'system';
+  document.documentElement.dataset.theme = value;
+  $('theme').value = value;
+  VolooI18n.savePreference('voloo.theme', value);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  for (const el of document.querySelectorAll('[aria-label]')) el.dataset.i18nAria = el.getAttribute('aria-label');
+  applyLanguage();
+  applyTheme(VolooI18n.readPreference('voloo.theme'));
+  $('language').addEventListener('change', (e) => { VolooI18n.setLanguage(e.target.value); applyLanguage(); });
+  $('theme').addEventListener('change', (e) => applyTheme(e.target.value));
   $('filter').addEventListener('input', (e) => { state.filter = e.target.value; render(); });
   for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => { state.view = b.dataset.view; render(); });
   for (const b of document.querySelectorAll('[data-feed]')) b.addEventListener('click', () => { state.feed = b.dataset.feed; render(); });
   const dlg = $('sheet');
   dlg.addEventListener('click', (e) => { if (e.target === dlg) closeSheet(); });
-  dlg.addEventListener('close', () => { state.sheet = null; });
+  dlg.addEventListener('cancel', () => cancelHolds(dlg));
+  dlg.addEventListener('close', () => { cancelHolds(dlg); state.sheet = null; });
   document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('filter').focus(); } });
-  refresh().then(connect).catch((e) => { signedOut = e.code === 'unauthorized'; render(); });
+  refresh().catch((e) => { signedOut = e.code === 'unauthorized'; render(); }).finally(() => { if (!signedOut) connect(); });
   setInterval(render, 1000);
 });

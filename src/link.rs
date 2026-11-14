@@ -286,6 +286,26 @@ impl Transport {
         self.link.path()
     }
 
+    /// Firmware updates deliberately leave CDC. Drop the exclusive OS handle
+    /// before ROM ISP or reconnection; no second process may race the worker.
+    pub fn release_for_update(&mut self) {
+        struct Released(String);
+        impl Link for Released {
+            fn write_all(&mut self, _: &[u8]) -> io::Result<()> {
+                Err(io::ErrorKind::NotConnected.into())
+            }
+            fn read(&mut self, _: &mut [u8], _: Duration) -> io::Result<usize> {
+                Err(io::ErrorKind::NotConnected.into())
+            }
+            fn path(&self) -> &str {
+                &self.0
+            }
+        }
+        let path = self.path().to_string();
+        self.link = Box::new(Released(path.clone()));
+        self.broken = Some(LinkError::Gone(path));
+    }
+
     /// Discards whatever is already buffered (late replies from earlier requests) without
     /// waiting: an empty buffer must not add latency to every request.
     fn drain(&mut self, budget: Duration) -> Result<usize, LinkError> {

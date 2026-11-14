@@ -4,7 +4,7 @@
 use crate::{
     config::Config,
     device::{Device, Diagnostics, ErrorKind, OpError},
-    discover, home,
+    discover, firmware, home,
     link::LinkStats,
     observe::{Fault, FaultCode, Recorder, new_trace_id, now},
     protocol::{Command, Identity, Status, Uid},
@@ -31,10 +31,28 @@ pub enum Job {
     Power(Command),
     Cycle { off_ms: u64, discharge: bool },
     Nickname(String),
+    Firmware(firmware::Image),
+    FirmwareOnline,
+    FirmwareRollback,
+    FirmwareStatus,
 }
 impl Job {
     pub fn writes(&self) -> bool {
-        matches!(self, Job::Power(_) | Job::Cycle { .. } | Job::Nickname(_))
+        matches!(
+            self,
+            Job::Power(_)
+                | Job::Cycle { .. }
+                | Job::Nickname(_)
+                | Job::Firmware(_)
+                | Job::FirmwareOnline
+                | Job::FirmwareRollback
+        )
+    }
+    fn maintenance(&self) -> bool {
+        matches!(
+            self,
+            Job::Firmware(_) | Job::FirmwareOnline | Job::FirmwareRollback
+        )
     }
     fn action(&self) -> String {
         match self {
@@ -44,6 +62,9 @@ impl Job {
             Job::Power(c) => c.name().into(),
             Job::Cycle { .. } => "cycle".into(),
             Job::Nickname(_) => "nickname".into(),
+            Job::Firmware(_) | Job::FirmwareOnline => "firmware_update".into(),
+            Job::FirmwareRollback => "firmware_rollback".into(),
+            Job::FirmwareStatus => "firmware_status".into(),
         }
     }
 }
@@ -82,6 +103,7 @@ pub struct Snapshot {
     pub last_operation: Option<Value>,
     pub faults: Vec<Fault>,
     pub metrics: Metrics,
+    pub firmware: Option<firmware::Progress>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -96,6 +118,7 @@ struct Entry {
     tx: Option<mpsc::Sender<Request>>,
     alive: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
+    updating: Arc<AtomicBool>,
 }
 
 pub struct Manager {
@@ -220,6 +243,12 @@ impl Manager {
         let present = self.candidates();
         let mut entries = self.entries.lock().unwrap();
         for (uid, path) in &present {
+            if entries
+                .get(uid)
+                .is_some_and(|e| e.updating.load(Ordering::SeqCst))
+            {
+                continue;
+            }
             let restart = match entries.get(uid) {
                 Some(e) => !e.alive.load(Ordering::SeqCst),
                 None => true,
@@ -242,10 +271,12 @@ impl Manager {
                     last_operation: None,
                     faults: Vec::new(),
                     metrics: Metrics::default(),
+                    firmware: None,
                 })),
                 tx: None,
                 alive: Arc::new(AtomicBool::new(false)),
                 stop: Arc::new(AtomicBool::new(false)),
+                updating: Arc::new(AtomicBool::new(false)),
             });
             entry.snapshot.lock().unwrap().port = path.clone();
             let (tx, rx) = mpsc::channel();
@@ -260,6 +291,7 @@ impl Manager {
                 snapshot: entry.snapshot.clone(),
                 alive: entry.alive.clone(),
                 stop: entry.stop.clone(),
+                updating: entry.updating.clone(),
             };
             let handle = std::thread::Builder::new()
                 .name(format!("voloo-{uid}"))
@@ -268,7 +300,10 @@ impl Manager {
             self.threads.lock().unwrap().push(handle);
         }
         for (uid, e) in entries.iter_mut() {
-            if !present.contains_key(uid) && e.alive.load(Ordering::SeqCst) {
+            if !present.contains_key(uid)
+                && e.alive.load(Ordering::SeqCst)
+                && !e.updating.load(Ordering::SeqCst)
+            {
                 e.stop.store(true, Ordering::SeqCst);
                 e.tx = None;
                 let port = e.snapshot.lock().unwrap().port.clone();
@@ -357,6 +392,14 @@ impl Manager {
         Ok(json!({"uid": uid, "locked": source.is_some(), "lock_source": source}))
     }
 
+    pub fn has_updates(&self) -> bool {
+        self.entries
+            .lock()
+            .unwrap()
+            .values()
+            .any(|e| e.updating.load(Ordering::SeqCst))
+    }
+
     pub fn devices(&self) -> Vec<Snapshot> {
         let entries = self.entries.lock().unwrap();
         entries
@@ -396,7 +439,17 @@ impl Manager {
             Some(id) => {
                 if let Ok(uid) = id.parse::<Uid>() {
                     return match devices.iter().find(|d| d.uid == uid) {
-                        Some(d) if d.online => Ok(uid),
+                        Some(d)
+                            if d.online
+                                || d.firmware.as_ref().is_some_and(|f| {
+                                    !matches!(
+                                        f.stage.as_str(),
+                                        "completed" | "failed" | "rolled_back"
+                                    )
+                                }) =>
+                        {
+                            Ok(uid)
+                        }
                         Some(d) => Err(OpError::new(
                             ErrorKind::LinkError,
                             format!(
@@ -413,9 +466,14 @@ impl Manager {
                         )),
                     };
                 }
-                let named: Vec<&Snapshot> = online
+                let named: Vec<&Snapshot> = devices
                     .iter()
-                    .copied()
+                    .filter(|d| {
+                        d.online
+                            || d.firmware.as_ref().is_some_and(|f| {
+                                !matches!(f.stage.as_str(), "completed" | "failed" | "rolled_back")
+                            })
+                    })
                     .filter(|d| d.nickname.as_deref() == Some(id))
                     .collect();
                 match named.as_slice() {
@@ -447,6 +505,7 @@ impl Manager {
             ));
         }
         let uid = self.resolve(id)?;
+        let maintenance = job.maintenance();
         let (reply, rx) = oneshot::channel();
         {
             let entries = self.entries.lock().unwrap();
@@ -456,7 +515,22 @@ impl Manager {
                 .ok_or_else(|| {
                     OpError::new(ErrorKind::LinkError, format!("Voloo {uid} is offline"))
                 })?;
+            let updating = &entries.get(&uid).unwrap().updating;
+            if updating.load(Ordering::SeqCst)
+                || (maintenance
+                    && updating
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err())
+            {
+                return Err(OpError::new(
+                    ErrorKind::Busy,
+                    "Firmware maintenance is in progress for this device; no other device operation was queued",
+                ));
+            }
             tx.send(Request { job, source, reply }).map_err(|_| {
+                if maintenance {
+                    updating.store(false, Ordering::SeqCst);
+                }
                 OpError::new(ErrorKind::LinkError, format!("Voloo {uid} went offline"))
             })?;
         }
@@ -485,6 +559,7 @@ struct Worker {
     snapshot: Arc<Mutex<Snapshot>>,
     alive: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
+    updating: Arc<AtomicBool>,
 }
 
 impl Worker {
@@ -598,10 +673,9 @@ impl Worker {
                 s.status = Some(report.status.clone());
                 s.observed_at = Some(report.observed_at.clone());
                 s.error = None;
-                let recovered = self.misses.swap(0, Ordering::SeqCst) >= NO_RESPONSE_POLLS;
-                if recovered {
-                    s.online = true;
-                }
+                let recovered =
+                    self.misses.swap(0, Ordering::SeqCst) >= NO_RESPONSE_POLLS || !s.online;
+                s.online = true;
                 drop(s);
                 if recovered {
                     m.recorder
@@ -652,6 +726,16 @@ impl Worker {
 
     fn handle(&self, device: &mut Device, req: Request, latencies: &mut VecDeque<u64>) {
         let m = &self.manager;
+        let maintenance = req.job.maintenance();
+        struct UpdateGuard(Option<Arc<AtomicBool>>);
+        impl Drop for UpdateGuard {
+            fn drop(&mut self) {
+                if let Some(flag) = self.0.take() {
+                    flag.store(false, Ordering::SeqCst);
+                }
+            }
+        }
+        let guard = UpdateGuard(maintenance.then(|| self.updating.clone()));
         let action = req.job.action();
         let writes = req.job.writes();
         if writes && let Some(source) = m.lock_source(&self.uid) {
@@ -680,6 +764,65 @@ impl Worker {
             Job::Power(c) => device.set_power(c).map(|r| json!(r)),
             Job::Cycle { off_ms, discharge } => device.cycle(off_ms, discharge).map(|r| json!(r)),
             Job::Nickname(name) => device.set_nickname(&name).map(|r| json!(r)),
+            Job::FirmwareStatus => firmware::status(device),
+            job @ (Job::Firmware(_) | Job::FirmwareOnline | Job::FirmwareRollback) => {
+                let online = matches!(job, Job::FirmwareOnline);
+                let image = match job {
+                    Job::Firmware(image) => Some(image),
+                    _ => None,
+                };
+                let mut report = |progress: firmware::Progress| {
+                    {
+                        let mut s = self.snapshot.lock().unwrap();
+                        if !progress.connected {
+                            s.online = false;
+                            s.status = None;
+                        }
+                        s.firmware = Some(progress.clone());
+                    }
+                    m.publish(
+                        "firmware.progress",
+                        json!({"uid":self.uid,"firmware":progress}),
+                    );
+                };
+                let result = if online {
+                    firmware::perform_online(device, m.config.scan_usb, &mut report)
+                } else {
+                    firmware::perform(device, image, m.config.scan_usb, &mut report)
+                };
+                if let Err(error) = &result {
+                    let mut s = self.snapshot.lock().unwrap();
+                    if !s
+                        .firmware
+                        .as_ref()
+                        .is_some_and(|p| matches!(p.stage.as_str(), "failed" | "rolled_back"))
+                    {
+                        let progress = firmware::Progress {
+                            stage: "failed".into(),
+                            percent: 100,
+                            connected: device.transport.broken.is_none(),
+                            written: 0,
+                            total: 0,
+                        };
+                        s.firmware = Some(progress.clone());
+                        drop(s);
+                        m.publish(
+                            "firmware.progress",
+                            json!({"uid":self.uid,"firmware":progress,"error":error}),
+                        );
+                    }
+                }
+                if device.transport.broken.is_none() {
+                    if let Ok(info) = device.info() {
+                        let mut s = self.snapshot.lock().unwrap();
+                        s.identity = Some(info.identity);
+                        s.nickname = info.nickname;
+                        s.port = device.port();
+                    }
+                    self.poll(device, latencies);
+                }
+                result
+            }
         };
         device.source = "daemon";
         let result = result.map_err(|mut e| {
@@ -697,6 +840,7 @@ impl Worker {
                 s.nickname = Some(name.to_string());
             }
         }
+        drop(guard);
         if writes {
             let summary = match &result {
                 Ok(v) => {
@@ -711,7 +855,7 @@ impl Worker {
             m.publish("operation.finished", summary);
         }
         let _ = req.reply.send(result);
-        if writes && device.transport.broken.is_none() {
+        if writes && !maintenance && device.transport.broken.is_none() {
             self.poll(device, latencies);
         }
     }
