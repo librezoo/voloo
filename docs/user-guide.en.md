@@ -1,10 +1,10 @@
-# Voloo user guide
+# voloo user guide
 
 [中文图文说明](user-guide.md)
 
-Voloo switches the power of a device under test (the load) on and off, from your
+voloo switches the power of a device under test (the load) on and off, from your
 computer, over one USB cable. The USB cable carries control only: the load's power
-comes from your own supply through Voloo's SOURCE terminals. Voloo switches it; it is
+comes from your own supply through voloo's SOURCE terminals. voloo switches it; it is
 not a power source.
 
 Three things to keep in mind:
@@ -13,22 +13,22 @@ Three things to keep in mind:
   keep its charge. **Discharge** turns off and actively drains the load until VOUT ≤ 1 V
   is confirmed.
 - **A reading of “—” or “unreadable” is invalid, never zero volts.**
-- **If a result is “unknown”, read the state before doing anything else.** Voloo never
+- **If a result is “unknown”, read the state before doing anything else.** voloo never
   repeats a power command on its own after a lost reply.
 
 ## Tested operating range and overvoltage protection
 
 The project provider reported on 2026-11-14 that the current USB-C board works with a **3 A constant-current load across 3.3–28 V DC**. The nominal input range is **3.3–28 V DC**, and the **maximum recommended load current is 3 A. Exceeding 3 A can damage the hardware.** The report does not extend to arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
 
-Load power is `P = V × I`: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. Voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.
+Load power is `P = V × I`: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.
 
 The firmware inhibits ON and turns off existing output when **valid measured VIN > 30.5 V**. At **valid VIN < 30.0 V, the overvoltage latch clears automatically**, but output **stays OFF**. No overvoltage reset command is needed. After returning to the nominal input range and checking the wiring and current, the user must explicitly press and hold **Switch On**, send a new `voloo on DEV` command, or ask the agent to switch that device on. Earlier ON state and rejected commands are never automatically resumed. The overvoltage latch is separate from the user operation lock set by `voloo lock`; `voloo unlock` does not reset overvoltage protection. Invalid or stale VIN also inhibits/cancels ON. Overvoltage shutdown does not automatically discharge. These are software measurement thresholds, not validated physical clamp voltages or response-time guarantees, and they do not raise the 28 V nominal upper limit.
 
 ## Before connecting power
 
 - **Reversed supply polarity damages the hardware.** Verify + / − before wiring and turn the supply output off before connecting it.
-- **Do not power both the load supply and the USB host computer from the same adapter.** Use independent supply A for Voloo IN / the load and another independent supply B for the operating computer. Different output ports on one multiport adapter do not count as independent supplies. Do not take load power from the host computer's USB port.
-- **3 A is the maximum recommended current. Higher current can damage the hardware.** This applies at every operating voltage: for example, 12 V × 4 A = 48 W still exceeds the current limit even though it is below 84 W. Set an appropriate external current limit no higher than 3 A; Voloo does not actively limit current.
+- **Do not power both the load supply and the USB host computer from the same adapter.** Use independent supply A for voloo IN / the load and another independent supply B for the operating computer. Different output ports on one multiport adapter do not count as independent supplies. Do not take load power from the host computer's USB port.
+- **3 A is the maximum recommended current. Higher current can damage the hardware.** This applies at every operating voltage: for example, 12 V × 4 A = 48 W still exceeds the current limit even though it is below 84 W. Set an appropriate external current limit no higher than 3 A; voloo does not actively limit current.
 
 ## 1. Install
 
@@ -50,7 +50,7 @@ No hardware yet? `voloo demo` opens the dashboard with simulated devices.
 ## 2. First steps
 
 ```sh
-voloo ls                         # every connected Voloo, its state and readings
+voloo ls                         # every connected voloo, its state and readings
 voloo on bench-a                 # by nickname…
 voloo off CD-AB-05-F3-69-BE-3B-5D   # …or by UID
 voloo discharge bench-a          # off, then drain the load to ≤ 1 V
@@ -65,7 +65,7 @@ programs. Exit codes: `0` done (or already so), `2` the device reported a failur
 device not found, `5` busy, locked or port in use.
 
 A small background process owns the USB ports so that the terminal, the dashboard, AI
-agents and your programs can all use a Voloo at the same time. It starts by itself,
+agents and your programs can all use a voloo at the same time. It starts by itself,
 listens on 127.0.0.1 only, and exits 10 minutes after the last client. Starting or
 stopping it never changes an output. `voloo daemon status` / `voloo daemon stop`.
 
@@ -89,7 +89,7 @@ and anything that needs attention.
 
 ## 4. AI agents (MCP)
 
-Voloo includes an MCP server. Every tool that runs local MCP servers uses the same
+voloo includes an MCP server. Every tool that runs local MCP servers uses the same
 command, `voloo mcp`:
 
 | Tool | Setup |

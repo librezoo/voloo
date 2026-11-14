@@ -15,6 +15,7 @@
   --text-3: rgb(45 26 43 / 62%);
   --grid: rgb(45 26 43 / 10%);
   --glyph-l: #2d1a2b;
+  --brand-dot: #98951C;
   --outline: #2d1a2b;
   --hard: #2d1a2b;
   --lid: #fec600;
@@ -39,7 +40,7 @@
     --void: #170e16; --void-2: #170e16; --panel: #241622; --panel-hi: #2d1a2b;
     --edge: rgb(245 241 233 / 9%); --edge-2: rgb(245 241 233 / 22%);
     --text: #f5f1e9; --text-2: rgb(245 241 233 / 76%); --text-3: rgb(245 241 233 / 60%);
-    --grid: rgb(245 241 233 / 8%); --glyph-l: #f5f1e9; --outline: #f5f1e9; --hard: #000;
+    --grid: rgb(245 241 233 / 8%); --glyph-l: #f5f1e9; --brand-dot: #BEBB47; --outline: #f5f1e9; --hard: #000;
     --lid: #ffcf3a; --mint: #3fd99a; --volt: #dbe63c; --apricot: #ff9a4d;
     --coral: #ff6b5f; --sky: #4cbcff; --lilac: #b49cf0; --jade: #3fd99a; --rose: #ff6fb5; --off: #a496a2;
     color-scheme: dark;
@@ -49,7 +50,7 @@
   --void: #170e16; --void-2: #170e16; --panel: #241622; --panel-hi: #2d1a2b;
   --edge: rgb(245 241 233 / 9%); --edge-2: rgb(245 241 233 / 22%);
   --text: #f5f1e9; --text-2: rgb(245 241 233 / 76%); --text-3: rgb(245 241 233 / 60%);
-  --grid: rgb(245 241 233 / 8%); --glyph-l: #f5f1e9; --outline: #f5f1e9; --hard: #000;
+  --grid: rgb(245 241 233 / 8%); --glyph-l: #f5f1e9; --brand-dot: #BEBB47; --outline: #f5f1e9; --hard: #000;
   --lid: #ffcf3a; --mint: #3fd99a; --volt: #dbe63c; --apricot: #ff9a4d;
   --coral: #ff6b5f; --sky: #4cbcff; --lilac: #b49cf0; --jade: #3fd99a; --rose: #ff6fb5; --off: #a496a2;
   color-scheme: dark;
@@ -92,7 +93,8 @@ code { padding: 1px 6px; border-radius: 6px; background: var(--edge); border: 1p
 .mark { width: 38px; height: 38px; flex: none; overflow: visible; }
 .mark-l { fill: var(--glyph-l); }
 .mark-dot { fill: var(--volt); }
-h1 { margin: 0; font-size: 26px; line-height: 1; font-weight: 900; letter-spacing: -0.04em; text-transform: uppercase; }
+h1 { margin: 0; font-size: 26px; line-height: 1; font-weight: 900; letter-spacing: -0.04em; text-transform: none; }
+.brand-lockup { display: block; width: 280px; height: 46.67px; color: var(--text); }
 .subtitle { margin: 6px 0 0; display: flex; align-items: center; gap: 8px; font: 500 12px/1 var(--mono); letter-spacing: .06em; color: var(--text-2); text-transform: uppercase; }
 .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--jade); box-shadow: 0 0 0 0 color-mix(in srgb, var(--jade) 60%, transparent); animation: beacon 2.4s ease-out infinite; flex: none; }
 .pulse.down { background: var(--apricot); animation: blink 1s steps(2) infinite; box-shadow: none; }

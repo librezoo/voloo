@@ -71,9 +71,9 @@ const messages = {
     "故障",
     "故障"
   ],
-  "Connect a Voloo": [
-    "连接你的 Voloo",
-    "連接你的 Voloo"
+  "Connect a voloo": [
+    "连接你的 voloo",
+    "連接你的 voloo"
   ],
   "Plug it in with a USB data cable — it appears here within a second.": [
     "用 USB 数据线连接，设备就会自动显示。",
@@ -95,9 +95,9 @@ const messages = {
     "换个名称或 UID 试试，或清空搜索。",
     "換個名稱或 UID 試試，或清空搜尋。"
   ],
-  "Voloo switches external power — it is not a power source. Off does not mean 0 V at the load; Discharge confirms VOUT ≤ 1 V. “—” means a reading is invalid, never zero.": [
-    "Voloo 控制外部供电的通断，本身不提供电源。关闭不代表负载端为 0 V；泄放会确认 VOUT ≤ 1 V。“—”表示读数无效，不是零。",
-    "Voloo 控制外部供電的通斷，本身不提供電源。關閉不代表負載端為 0 V；洩放會確認 VOUT ≤ 1 V。「—」表示讀數無效，不是零。"
+  "voloo switches external power — it is not a power source. Off does not mean 0 V at the load; Discharge confirms VOUT ≤ 1 V. “—” means a reading is invalid, never zero.": [
+    "voloo 控制外部供电的通断，本身不提供电源。关闭不代表负载端为 0 V；泄放会确认 VOUT ≤ 1 V。“—”表示读数无效，不是零。",
+    "voloo 控制外部供電的通斷，本身不提供電源。關閉不代表負載端為 0 V；洩放會確認 VOUT ≤ 1 V。「—」表示讀數無效，不是零。"
   ],
   "Connecting": [
     "正在连接",
@@ -700,8 +700,8 @@ const messages = {
     "因 VOUT 讀數無效，洩放已停止。請檢查電路板接地和 VOUT 取樣；不要認定負載已經放電。"
   ],
   "The device latched an internal error. Read status and diagnostics, then power-cycle the Voloo's USB connection if it persists.": [
-    "设备锁存了内部错误。请读取状态和诊断；若问题持续，请断开并重新连接 Voloo 的 USB。",
-    "裝置鎖存了內部錯誤。請讀取狀態和診斷；若問題持續，請拔除並重新連接 Voloo 的 USB。"
+    "设备锁存了内部错误。请读取状态和诊断；若问题持续，请断开并重新连接 voloo 的 USB。",
+    "裝置鎖存了內部錯誤。請讀取狀態和診斷；若問題持續，請拔除並重新連接 voloo 的 USB。"
   ],
   "VIN measurement is invalid; readings are not zero volts. Check SOURCE wiring and the PWR_GND/BUS_GND connection.": [
     "VIN 测量无效，不代表零伏。请检查 SOURCE 接线和 PWR_GND/BUS_GND 连接。",
@@ -756,12 +756,12 @@ const messages = {
     "序列埠讀寫失敗。請重新連接裝置並先讀取狀態，再執行操作。"
   ],
   "Logs could not be written. Check free space and permissions of the Voloo home directory.": [
-    "无法写入日志。请检查 Voloo 数据目录的剩余空间和权限。",
-    "無法寫入日誌。請檢查 Voloo 資料目錄的剩餘空間和權限。"
+    "无法写入日志。请检查 voloo 数据目录的剩余空间和权限。",
+    "無法寫入日誌。請檢查 voloo 資料目錄的剩餘空間和權限。"
   ],
-  "Voloo doesn’t make power.": [
-    "Voloo 不生产电，",
-    "Voloo 不生產電，"
+  "voloo doesn’t make power.": [
+    "voloo 不生产电，",
+    "voloo 不生產電，"
   ],
   "It puts you in control.": [
     "只让电听你指挥。",

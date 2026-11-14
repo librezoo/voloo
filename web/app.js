@@ -1,4 +1,4 @@
-// Voloo — LibreZoo Instrument. No framework, no build step.
+// voloo — LibreZoo Instrument. No framework, no build step.
 // Device data is only ever inserted as text; innerHTML is used for static icons only.
 // Power changes are hold-to-confirm: the switch blade closes (or opens) while you hold.
 // Results are what the device confirmed; an unknown outcome is highlighted, never retried.
@@ -47,7 +47,7 @@ const FAULT = localized({
   LINK_IO: 'Connection error',
   HOST_LOG_WRITE_FAILED: "Can't write logs",
 });
-const SOURCE = localized({ ui: 'Web', cli: 'Terminal', mcp: 'AI agent', http: 'API', daemon: 'Voloo' });
+const SOURCE = localized({ ui: 'Web', cli: 'Terminal', mcp: 'AI agent', http: 'API', daemon: 'voloo' });
 const DONE = localized({ on: 'switched on', off: 'switched off', discharge: 'discharged', cycle: 'power-cycled', nickname: 'renamed', firmware_update: 'updated firmware', firmware_rollback: 'rolled back firmware' });
 const FAIL = localized({ on: 'switch on', off: 'switch off', discharge: 'discharge', cycle: 'power-cycle', nickname: 'rename', firmware_update: 'update firmware on', firmware_rollback: 'roll back firmware on' });
 const ACTION_STYLE = {
@@ -89,7 +89,7 @@ const micro = (text) => h('span', { class: 'micro' }, text);
 const v2 = (mv) => (mv / 1000).toFixed(2);
 const v3 = (mv) => (mv / 1000).toFixed(3);
 const shortUid = (uid) => uid.replace(/-/g, '').slice(-4);
-const nameOf = (d) => (d && d.nickname) || `Voloo ${shortUid(d.uid)}`;
+const nameOf = (d) => (d && d.nickname) || `voloo ${shortUid(d.uid)}`;
 const enc = encodeURIComponent;
 function ago(iso) {
   if (!iso) return '';

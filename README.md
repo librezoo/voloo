@@ -1,12 +1,12 @@
-# Voloo Host
+# voloo Host
 
-Local host software for the USB-C Voloo Switch. One `voloo` executable talks to
+Local host software for the USB-C voloo Switch. One `voloo` executable talks to
 each Switch over its own USB cable (USB CDC, no driver needed on macOS, Linux or
 Windows 10/11) and offers the same functions as a CLI, an MCP server for AI agents
-a local HTTP API for any language and a web dashboard for every connected Voloo.
-See the [中文使用说明](docs/user-guide.md) · [English guide](docs/user-guide.en.md).
+a local HTTP API for any language and a web dashboard for every connected voloo.
+See the [中文使用说明](docs/user-guide.md) · [English guide](docs/user-guide.en.md) · [品牌素材](branding/README.md).
 
-Voloo only switches the externally supplied SOURCE power; it is not a power source.
+voloo only switches the externally supplied SOURCE power; it is not a power source.
 **OFF does not mean the load terminals are at zero volts** — use `discharge` to
 confirm VOUT ≤ 1 V.
 
@@ -29,7 +29,7 @@ sh packaging/check-install.sh
 ## How it runs
 
 A serial port can be open in only one program, so a background process
-(`voloo daemon run`) owns every Voloo port. The CLI, `voloo mcp` and HTTP clients
+(`voloo daemon run`) owns every voloo port. The CLI, `voloo mcp` and HTTP clients
 start it automatically on first use. It listens on 127.0.0.1 only, follows USB
 hot-plug, polls each device (1 Hz, 4 Hz while an event stream is open), and exits
 after 10 minutes without clients. **Starting or stopping it never changes any
@@ -41,12 +41,12 @@ output state** — the Switch keeps its last output when communication is lost.
 ## Commands
 
 Devices are named by full UID (`CD-AB-05-F3-69-BE-3B-5D`) or by nickname. Read
-commands may omit the device when exactly one Voloo is connected; write commands
+commands may omit the device when exactly one voloo is connected; write commands
 always need it.
 
 | Command | Effect |
 | --- | --- |
-| `voloo ls` | Connected Voloo devices with state and active faults |
+| `voloo ls` | Connected voloo devices with state and active faults |
 | `voloo status [DEV]` / `info` / `diag --kind communication\|adc\|fast` | Read-only |
 | `voloo on DEV` / `off DEV` / `discharge DEV` | Switch and confirm by status |
 | `voloo cycle DEV [--off-ms 1000] [--no-discharge]` | Discharge (or OFF), wait, ON; stops at the first failure |
@@ -82,7 +82,7 @@ outcome is confirmed by reading status or reported as unknown.
 
 `voloo ui` opens the dashboard in your browser through a one-time link (valid for
 60 s) that becomes a browser session; the page has no other way in. It shows
-every connected Voloo with its state, VIN/VOUT (invalid readings are shown as
+every connected voloo with its state, VIN/VOUT (invalid readings are shown as
 invalid, not 0 V), the last minute of VOUT, the last operation and active faults,
 and updates live. Every switch asks for confirmation and shows the result the
 device confirmed; an unknown outcome is highlighted. `voloo ui --no-open` prints
