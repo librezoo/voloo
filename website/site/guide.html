@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><link href="data:," rel="icon"/><title>voloo 中文图文使用说明</title><style>
+:root{color-scheme:light}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{max-width:900px;margin:30px auto;padding:0 22px 80px;font:17px/1.85 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#2d1a2b;background:#f5f1e9;overflow-wrap:anywhere}
+.page-nav{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;border-bottom:2px solid #2d1a2b;padding-bottom:16px;margin-bottom:28px;font-size:15px}
+h1{font-size:38px;line-height:1.35;letter-spacing:-.03em;margin:0 0 24px}h2{margin-top:50px;font-size:27px;line-height:1.5;border-bottom:2px solid #b49cf0;padding-bottom:8px}h3{margin-top:34px;font-size:21px;line-height:1.6}p,ul,ol{margin:18px 0}li+li{margin-top:8px}a{color:#5e43b7;text-underline-offset:3px}strong{font-weight:750}
+pre{background:#241622;color:#fffdf8;padding:20px;border-radius:14px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.87em}p code,li code,td code{background:rgba(94,67,183,.07);padding:2px 4px;border-radius:4px}pre code{font-size:14px;background:transparent;padding:0}
+table{border-collapse:collapse;width:100%;font-size:15px;line-height:1.75;margin:22px 0}th,td{border:1px solid #c7bcc5;text-align:left;padding:10px 12px;vertical-align:top}th{background:#fec600}td{background:#fffdf8}blockquote{margin:22px 0;padding:2px 22px;border-left:5px solid #5fc49a;background:#fffdf8;border-radius:0 10px 10px 0}
+img{display:block;max-width:100%;height:auto;margin:24px auto 0;border-radius:14px;border:1px solid #c7bcc5}.figure-link{display:block}.figure-link:focus-visible{outline:3px solid #3fb2ff;outline-offset:4px}p:has(>em:only-child){font-size:14px;line-height:1.75;color:#65545f;margin-top:12px}em{font-style:normal}
+@media(max-width:600px){body{margin-top:18px;padding:0 18px 50px;font-size:16px}h1{font-size:30px}h2{font-size:24px;margin-top:38px}th,td{padding:7px;font-size:14px}table{display:block;overflow-x:auto}pre{padding:16px}img{border-radius:10px}}
+@media print{body{max-width:none;padding:0;font-size:11pt;background:white}.page-nav{display:none}h2,h3{break-after:avoid}pre,blockquote,img{break-inside:avoid}img{max-height:230mm;object-fit:contain}a{color:inherit}}
+</style><style id="locale-style">
+.locale-link{display:inline-flex;align-items:center;justify-content:center;flex:none;padding:7px 10px;border:1px solid currentColor;border-radius:999px;font:600 13px/1.2 system-ui,sans-serif;text-decoration:none;white-space:nowrap}
+@media(max-width:640px){.bar .wrap{gap:10px}.bar .brand img{width:min(48vw,244px);height:auto}.bar .product-category{display:none}.bar .theme-toggle{flex:none}.bar .locale-link{margin-left:auto}.bar .brand{margin-right:auto}}
+</style><link href="guide.html" hreflang="zh-CN" rel="alternate"/><link href="guide.en.html" hreflang="en" rel="alternate"/><link href="https://voloo.librezoo.com/guide.html" rel="canonical"/><link href="assets/fonts/fonts.css" rel="stylesheet"/>
+</head><body><nav class="page-nav"><a href="index.html">← 返回 voloo 介绍</a><span>中文图文使用说明 · 图片可点开查看大图</span><a class="locale-link" href="guide.en.html" hreflang="en" lang="en">EN</a><a href="downloads.html" id="downloads-link">海报与说明书下载</a></nav><main><h1 id="voloo-使用说明">voloo 使用说明</h1>
+<p>中文图文版 · <a href="guide.en.html">English guide</a></p>
+<p>voloo 是一个由电脑控制的直流电源开关。把它接在独立直流电源和设备之间，再用 USB-C 数据线连接电脑，就能通过网页仪表盘、命令行、AI Agent 或本地 HTTP API 控制供电。</p>
+<p><strong>voloo 只切换你接入的电源，本身不是电源。</strong> USB-C 负责控制，不负责给设备供电。本说明适用于 USB-C 连接的 voloo。</p>
+<p><strong>标称工作电压：3.3–28 V DC；最高建议电流：3 A。超过 3 A 可能损坏硬件。</strong></p>
+<p>快速查阅：<a href="quick-start.html">配图快速上手</a> · <a href="#1-%E5%AE%89%E8%A3%85%E5%92%8C%E6%97%A0%E7%A1%AC%E4%BB%B6%E4%BD%93%E9%AA%8C">安装体验</a> · <a href="#2-%E6%8E%A5%E7%BA%BF%E5%92%8C%E4%B8%8A%E7%94%B5">接线和参数</a> · <a href="#4-%E7%94%A8%E7%BD%91%E9%A1%B5%E4%BB%AA%E8%A1%A8%E7%9B%98%E6%8E%A7%E5%88%B6">仪表盘</a> · <a href="#6-%E6%8E%A5%E5%85%A5-ai-agent">AI Agent</a> · <a href="#7-%E8%BF%87%E5%8E%8B%E4%BF%9D%E6%8A%A4%E4%B8%8E%E6%81%A2%E5%A4%8D%E4%BE%9B%E7%94%B5">过压后的恢复方式</a> · <a href="#9-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98">常见问题</a></p>
+<h2 id="先记住三件事">先记住三件事</h2>
+<ul>
+<li><strong>OFF 不等于 0 V。</strong> 关断后，负载可能仍有残压。需要主动泄放时，使用 <code>discharge</code>，并以设备确认输出电压 ≤ 1 V 为完成条件。</li>
+<li><strong>无效读数不等于 0 V。</strong> 界面显示“—”或 <code>unreadable</code>，以及 JSON 中的 <code>null</code>，都表示当前没有有效测量值。</li>
+<li><strong>结果未知时先查状态。</strong> 遇到 <code>unknown</code>、断线或等待超时，先查询设备当前状态，不要盲目重发电源命令。等待超时也不表示设备动作已经取消。</li>
+</ul>
+<h2 id="1-安装和无硬件体验">1 安装和无硬件体验</h2>
+<p>支持 macOS 11 及以上、Linux、Windows 10/11。请先安装 Node.js 18 或更新版本，再在终端执行：</p>
+<pre><code class="language-sh">npm install -g @librezoo/voloo
+voloo --version
+</code></pre>
+<p>安装后，命令名是 <code>voloo</code>。不想全局安装时，也可以用以下方式运行一次：</p>
+<pre><code class="language-sh">npx @librezoo/voloo ls
+</code></pre>
+<p>没有硬件也能先体验仪表盘：</p>
+<pre><code class="language-sh">voloo demo
+</code></pre>
+<p><code>demo</code> 使用模拟设备，不扫描或控制真实硬件。退出演示不会切换真实设备的供电。</p>
+<h2 id="2-接线和上电">2 接线和上电</h2>
+<p>准备一根<strong>支持数据传输</strong>的 USB 线。只支持充电的线不能用于通信；电脑一端可以是 USB-A 或 USB-C。</p>
+<p><a class="figure-link" href="assets/guide/port-map.png" rel="noopener" target="_blank"><img alt="voloo 接口识别：IN 接独立电源，OUT 接设备，USB-C 接电脑" src="assets/guide/port-map.png"/></a></p>
+<p><em>图 1：产品图为 AI 辅助效果渲染，接口标注用于识别。接线以实物和外壳的正负极标记为准。</em></p>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>连接什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IN / SOURCE</td>
+<td>独立直流电源，按外壳的正负极标记连接</td>
+</tr>
+<tr>
+<td>OUT / DUT</td>
+<td>设备的电源输入，按正负极连接</td>
+</tr>
+<tr>
+<td>USB-C</td>
+<td>控制电脑，只承担控制与通信</td>
+</tr>
+</tbody>
+</table>
+<p>图示按 <strong>红线接正极＋、黑线接负极−</strong> 配线。线色只用于辅助识别，不能代替电源极性测量和实物端子标记；图中导线是连接示意。</p>
+<h3 id="按压式端子怎么接线和取线">按压式端子怎么接线和取线</h3>
+<p>橙色按压件用于开夹接线，不是供电开关；通断电在网页仪表盘、CLI 或 Agent 中操作。端子固定在 voloo 上，无需拧螺丝或拆下整个端子。</p>
+<p>接线、换线或取线前，先确认断电。如设备有残压，先保持 USB 连接执行泄放并确认 VOUT ≤ 1 V；再关闭并断开外部电源、拔下 USB-C，确认输入与设备端无电后操作导线。</p>
+<ol>
+<li><strong>处理线头：</strong> 未处理导线用剥线钳按厂家图纸剥线 <strong>11 mm</strong>，整理线芯，不留散丝；预制端头先确认与端子匹配。</li>
+<li><strong>按住：</strong> 按住对应橙色按压件，方向朝电路板，使夹口打开。</li>
+<li><strong>插入：</strong> 持续按住，把线插入相邻的<strong>绿色圆孔</strong>，让铜芯完全进入夹持区。不要插入橙色开口或绿色细槽。</li>
+<li><strong>确认：</strong> 松开按压件，轻拉导线确认夹紧，孔外不露铜。</li>
+</ol>
+<p><a class="figure-link" href="assets/guide/terminal-use.png" rel="noopener" target="_blank"><img alt="按压式端子接线四步：剥线11毫米、按住橙色件、插入绿色圆孔、松开并轻拉确认" src="assets/guide/terminal-use.png"/></a></p>
+<p><strong>取线：</strong> 确认断电后，按住对应橙色件，再沿进线孔方向取出，不要直接硬拽或撬动按压件。</p>
+<p>剥线长度依据 <a href="https://www.lcsc.com/datasheet/C475134.pdf">KEFA KF142V-5.08 厂家图纸（立创 C475134）</a>。端子元件的其他额定参数不会提高 voloo 整机标称 <strong>3.3–28 V、最高建议 3 A</strong> 的范围。</p>
+<h3 id="电压-电流和功率边界">电压 电流和功率边界</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>当前参数与适用范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>标称工作电压</td>
+<td><strong>3.3–28 V DC</strong></td>
+</tr>
+<tr>
+<td>最高建议电流</td>
+<td><strong>3 A；超过 3 A 可能损坏硬件。</strong> 实际负载与外部电源限流设置都应遵守这一限制</td>
+</tr>
+<tr>
+<td>已验证负载工况</td>
+<td>3.3–28 V 范围的 <strong>3 A 恒流负载</strong>实测工作正常</td>
+</tr>
+<tr>
+<td>负载功率</td>
+<td>按 <code>P = U × I</code> 换算；28 V × 3 A ≈ <strong>84 W</strong>，是按该电压与电流换算的负载功率，不是脱离工况的统一功率额定</td>
+</tr>
+<tr>
+<td>供电与限流</td>
+<td>voloo 只做电源开关，不自动调压、限流或限功率；由外部电源设置合适的电流限制</td>
+</tr>
+</tbody>
+</table>
+<p>已测试工况为 <strong>3.3–28 V、3 A 恒流负载</strong>。不同线材、接线、外壳及环境条件仍需确认压降和温升；该工况不扩展为任意启动浪涌、感性回灌、全温或无限时长运行的保证。</p>
+<p><a class="figure-link" href="assets/guide/voltage-boundaries.png" rel="noopener" target="_blank"><img alt="标称工作电压 3.3–28 V、3 A 恒流负载和 30.5 V 软件过压阈值对照" src="assets/guide/voltage-boundaries.png"/></a></p>
+<p><em>图 2：标称工作范围与保护阈值分开看。3.3 V 是标称下界，不是固件欠压阈值；28 V 是标称上界，不是软件过压触发点。</em></p>
+<p>以下为 <strong>3 A 恒流负载</strong>下的功率换算，便于按供电电压选择负载：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:right">工作电压</th>
+<th style="text-align:right">电流</th>
+<th style="text-align:right">负载功率换算</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">3.3 V</td>
+<td style="text-align:right">3 A</td>
+<td style="text-align:right">9.9 W</td>
+</tr>
+<tr>
+<td style="text-align:right">5 V</td>
+<td style="text-align:right">3 A</td>
+<td style="text-align:right">15 W</td>
+</tr>
+<tr>
+<td style="text-align:right">12 V</td>
+<td style="text-align:right">3 A</td>
+<td style="text-align:right">36 W</td>
+</tr>
+<tr>
+<td style="text-align:right">24 V</td>
+<td style="text-align:right">3 A</td>
+<td style="text-align:right">72 W</td>
+</tr>
+<tr>
+<td style="text-align:right">28 V</td>
+<td style="text-align:right">3 A</td>
+<td style="text-align:right">84 W</td>
+</tr>
+</tbody>
+</table>
+<p><strong>任何工作电压下，最高建议电流都为 3 A。</strong> 例如 12 V × 4 A = 48 W，虽然低于 84 W，但电流已超过 3 A，仍可能损坏硬件。不要根据 84 W 反推出低压下可以使用更大的电流。</p>
+<p>请按负载需要将外部电源的限流值设置为不超过 3 A，必要时进一步降低。voloo 不提供主动限流，保险丝也不是精确限流器。</p>
+<p>主动泄放用于已经断开外部供电的负载残压，不是给电池放电或吸收持续供电功率的电子负载。</p>
+<h3 id="上电前必须确认">上电前必须确认</h3>
+<ol>
+<li><strong>正负极接反会损坏硬件。</strong> 接线前确认电源极性，关闭电源输出后再按外壳 <code>+ / −</code> 标记连接，不要只凭端子左右方向判断。</li>
+<li><strong>不要用同一个适配器，同时给设备和 USB 操作电脑供电。</strong> 负载端使用独立电源 A，经 voloo 的 IN / OUT 给设备供电；操作电脑使用另一独立电源 B。<strong>同一多口适配器的不同输出口也不算独立电源。</strong></li>
+<li><strong>负载电流不要超过 3 A。</strong> 超过最高建议电流可能损坏硬件。接线前设置外部电源限流，并考虑启动瞬间的电流。</li>
+</ol>
+<h3 id="接线顺序">接线顺序</h3>
+<ol>
+<li>电源还未连接 voloo 时，用万用表确认电源的正负极，再关闭电源输出。</li>
+<li><strong>电源 A → IN / SOURCE</strong>，核对正负极；A 不与操作电脑共用适配器。</li>
+<li><strong>OUT / DUT → 设备</strong>。设备只从 OUT 取电，断开它自带 USB、电池、调试器 VCC / 3V3 等其他供电。</li>
+<li><strong>电脑 USB → voloo USB-C</strong>，使用数据线。电脑由另一独立电源 B 供电；负载不从电脑 USB 取电。</li>
+<li>使用调试器或 USB 转串口时，只连接需要的 GND 和信号线，不接它们的供电输出。</li>
+<li>确认标称电压范围、极性、独立供电和电流限制均正确后，再打开独立电源。</li>
+</ol>
+<p><a class="figure-link" href="assets/guide/wiring-steps.png" rel="noopener" target="_blank"><img alt="接线顺序：独立电源 A 给负载供电，另一电源 B 给 USB 操作电脑供电" src="assets/guide/wiring-steps.png"/></a></p>
+<p><em>图 3：负载与 USB 操作电脑分别使用独立电源。这里的“独立”指不同适配器或独立直流电源，不是同一适配器上的不同输出口。</em></p>
+<p>设备同时接入其他供电可能造成 OUT 倒灌，使关断后设备仍有电，甚至损坏硬件或电脑 USB 口。</p>
+<h2 id="3-第一次连接">3 第一次连接</h2>
+<p>先列出设备，再读取当前状态：</p>
+<pre><code class="language-sh">voloo ls
+voloo status
+</code></pre>
+<p>只有一台设备时，<code>status</code> 等读取命令可以不写设备名。连接多台设备时，请指定 <code>voloo ls</code> 列出的完整 UID 或唯一昵称。</p>
+<p>可以给设备起一个好记的昵称，例如 <code>bench-a</code>。<strong>设置昵称要求输出已经完全关断且设备空闲；不要为了改名而在未确认负载用途时切断供电。</strong></p>
+<pre><code class="language-sh"># 将下面的示例 UID 替换为 voloo ls 实际列出的完整 UID
+voloo name 5E-11-D0-00-00-00-00-01 bench-a
+</code></pre>
+<p>昵称会保存在设备中，重新插拔后仍可使用。后文的 <code>bench-a</code> 都指你已经确认并命名的那台设备；也可以直接使用它的完整 UID。</p>
+<h2 id="4-用网页仪表盘控制">4 用网页仪表盘控制</h2>
+<pre><code class="language-sh">voloo ui
+</code></pre>
+<p>命令会打开本机浏览器。仪表盘列出连接的 voloo，显示输入电压 VIN、输出电压 VOUT、当前状态、最近的输出电压变化和需要处理的故障。界面语言可选择简体中文，外观可选择浅色、深色或跟随系统。</p>
+<p><a class="figure-link" href="assets/guide/dashboard-zh.png" rel="noopener" target="_blank"><img alt="voloo 简体中文仪表盘，显示设备名称、状态和输入输出电压" src="assets/guide/dashboard-zh.png"/></a></p>
+<p><em>图 4：中文版仪表盘，使用 <code>voloo demo</code> 模拟设备截图。图中的 UID、电压与操作状态是演示数据，不是实物测试记录。</em></p>
+<ul>
+<li><strong>切换供电：</strong> 按住设备开关约 0.6 秒。短按只显示提示，松开后不切换。</li>
+<li><strong>查看详情：</strong> 点击设备，查看详细状态、泄放、断电重启、改名和锁定等操作。</li>
+<li><strong>锁定设备：</strong> 锁定期间，网页、终端、Agent 和 API 的供电及改名操作会被拒绝；明确解锁后恢复。</li>
+<li><strong>处理未知结果：</strong> 先重新读取状态，确认设备实际处于什么状态，再决定下一步。</li>
+</ul>
+<p><a class="figure-link" href="assets/guide/device-controls-zh.png" rel="noopener" target="_blank"><img alt="voloo 设备详情中的输出开关、泄放、断电重启与状态显示" src="assets/guide/device-controls-zh.png"/></a></p>
+<p><em>图 5：设备详情操作区（模拟设备截图）。先核对设备名称和 UID，再长按需要执行的操作；结果未知时先“检查状态”，不要盲目重复。</em></p>
+<p>不想自动打开浏览器时：</p>
+<pre><code class="language-sh">voloo ui --no-open
+</code></pre>
+<p>它会输出一次性登录链接，需在 60 秒内打开。这个链接仅用于本机访问，不要当作可以发给朋友的公开网页。</p>
+<h2 id="5-常用命令">5 常用命令</h2>
+<p>所有改变供电或设备昵称的命令都必须明确指定设备，不能省略目标。</p>
+<table>
+<thead>
+<tr>
+<th>要做什么</th>
+<th>命令</th>
+<th>注意事项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>查看所有设备</td>
+<td><code>voloo ls</code></td>
+<td>先核对目标设备</td>
+</tr>
+<tr>
+<td>读取当前状态</td>
+<td><code>voloo status bench-a</code></td>
+<td>只读取，不改变供电</td>
+</tr>
+<tr>
+<td>开启输出</td>
+<td><code>voloo on bench-a</code></td>
+<td>接通外接电源到负载</td>
+</tr>
+<tr>
+<td>关断输出</td>
+<td><code>voloo off bench-a</code></td>
+<td>不主动泄放，不代表输出已到 0 V</td>
+</tr>
+<tr>
+<td>关断并主动泄放</td>
+<td><code>voloo discharge bench-a</code></td>
+<td>输出 ≤ 1 V 并确认后才算完成</td>
+</tr>
+<tr>
+<td>泄放后等待 2 秒，再上电</td>
+<td><code>voloo cycle bench-a --off-ms 2000</code></td>
+<td>适合重复冷启动；任一步失败就停止</td>
+</tr>
+<tr>
+<td>锁定</td>
+<td><code>voloo lock bench-a</code></td>
+<td>锁定期间拒绝供电及改名操作</td>
+</tr>
+<tr>
+<td>解锁</td>
+<td><code>voloo unlock bench-a</code></td>
+<td>解除软件操作锁</td>
+</tr>
+<tr>
+<td>查看故障</td>
+<td><code>voloo faults bench-a</code></td>
+<td>根据建议处理原因</td>
+</tr>
+<tr>
+<td>检查安装与连接</td>
+<td><code>voloo doctor</code></td>
+<td>检查 USB、权限、设备、读数和日志</td>
+</tr>
+<tr>
+<td>查看操作记录</td>
+<td><code>voloo log --kind operations</code></td>
+<td>查看操作来源和前后状态</td>
+</tr>
+</tbody>
+</table>
+<h3 id="off-和-discharge-怎么选">off 和 discharge 怎么选</h3>
+<p><code>off</code> 只断开供电，适用于你只想关断、并且会自行确认负载残压的场景。<code>discharge</code> 会先关断再主动泄放，确认输出 ≤ 1 V 才报告完成，设备的泄放等待上限为 5 秒。</p>
+<p>需要反复冷启动时，优先用 <code>cycle</code>：它默认先泄放，完成后再等待指定时间，最后重新上电。任一步失败都不会继续执行后面的上电操作。</p>
+<p><code>cycle --no-discharge</code> 会改为普通 OFF 后等待；它没有确认残压已降到 ≤ 1 V，不应把它当作泄放完成。</p>
+<h3 id="命令的结果怎么判断">命令的结果怎么判断</h3>
+<p>命令执行后，voloo 会读取设备状态，再报告设备确认的结果。丢失回复时不会自动重发电源命令。</p>
+<p>脚本可以添加 <code>--json</code> 读取结构化输出，并根据退出码决定下一步：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:right">退出码</th>
+<th>含义</th>
+<th>接下来怎么做</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">0</td>
+<td>操作完成，或设备本来就在目标状态</td>
+<td>继续下一步</td>
+</tr>
+<tr>
+<td style="text-align:right">2</td>
+<td>设备报告失败，例如泄放超时</td>
+<td>检查负载、接线和故障原因</td>
+</tr>
+<tr>
+<td style="text-align:right">3</td>
+<td>结果未知、设备离线或通信中断</td>
+<td>先读取状态，不要直接重试</td>
+</tr>
+<tr>
+<td style="text-align:right">4</td>
+<td>参数错误或找不到设备</td>
+<td>检查完整 UID、昵称和命令参数</td>
+</tr>
+<tr>
+<td style="text-align:right">5</td>
+<td>设备忙、已锁定、端口被占用等</td>
+<td>处理原因后再决定是否继续</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6-接入-ai-agent">6 接入 AI Agent</h2>
+<p>voloo 提供本地 stdio MCP 服务；以下为不同客户端的配置示例，配置位置与权限设置依客户端版本而异。先完成 npm 安装，再按客户端选择接入方式。由客户端启动 <code>voloo mcp</code>，不需要另开一个终端让它一直运行。</p>
+<h3 id="codex">Codex</h3>
+<p>安装了 Codex CLI 时，在终端执行：</p>
+<pre><code class="language-sh">codex mcp add voloo -- voloo mcp
+</code></pre>
+<p>也可以将以下条目合并到 <code>~/.codex/config.toml</code>，保留文件中的其他设置：</p>
+<pre><code class="language-toml">[mcp_servers.voloo]
+command = "voloo"
+args = ["mcp"]
+</code></pre>
+<p>参见 <a href="https://learn.chatgpt.com/docs/developer-commands#codex-mcp">Codex 官方 MCP 命令说明</a>。</p>
+<h3 id="claude-code">Claude Code</h3>
+<pre><code class="language-sh">claude mcp add voloo -- voloo mcp
+</code></pre>
+<h3 id="cursor">Cursor</h3>
+<p>将 <code>voloo</code> 条目合并到 <code>~/.cursor/mcp.json</code> 的 <code>mcpServers</code> 中；已有其他 MCP 服务时不要覆盖它们：</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "voloo": {
+      "type": "stdio",
+      "command": "voloo",
+      "args": ["mcp"]
+    }
+  }
+}
+</code></pre>
+<p>参见 <a href="https://cursor.com/docs/mcp">Cursor 官方 MCP 配置说明</a>。</p>
+<h3 id="vs-code-copilot">VS Code Copilot</h3>
+<p>新版 Copilot 可在项目根目录的 <code>.mcp.json</code> 中使用以下配置：</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "voloo": {
+      "type": "stdio",
+      "command": "voloo",
+      "args": ["mcp"],
+      "tools": ["*"]
+    }
+  }
+}
+</code></pre>
+<p>配置位置和格式依客户端版本而异。请查看 <a href="https://code.visualstudio.com/docs/agents/reference/mcp-configuration">VS Code 官方 MCP 配置说明</a>，合并配置，不要直接覆盖已有文件。</p>
+<h3 id="其他本地-mcp-客户端">其他本地 MCP 客户端</h3>
+<p>在客户端的 MCP 设置中选择本地 stdio 服务，填写：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>名称</td>
+<td><code>voloo</code></td>
+</tr>
+<tr>
+<td>启动命令 command</td>
+<td><code>voloo</code></td>
+</tr>
+<tr>
+<td>参数 args</td>
+<td><code>["mcp"]</code></td>
+</tr>
+</tbody>
+</table>
+<p>如果客户端提示找不到 <code>voloo</code>，先在终端运行 <code>voloo --version</code> 确认安装成功；必要时将启动命令换成 <code>voloo</code> 可执行文件的完整路径。</p>
+<h3 id="接入后怎么用">接入后怎么用</h3>
+<p>先让 Agent 读取设备列表和状态，确认目标后再控制供电。例如：</p>
+<blockquote>
+<p>列出连接的 voloo，告诉我每台设备的昵称、当前状态和故障。</p>
+</blockquote>
+<p>确认 <code>bench-a</code> 是目标设备后：</p>
+<blockquote>
+<p>把 bench-a 冷启动一次：泄放后等待 2 秒，再重新上电，并报告设备确认的结果。</p>
+</blockquote>
+<p>Agent 可以使用以下工具：</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>voloo_list_devices</code></td>
+<td>列出设备</td>
+</tr>
+<tr>
+<td><code>voloo_get_status</code></td>
+<td>读取状态</td>
+</tr>
+<tr>
+<td><code>voloo_power</code></td>
+<td>开启、关断、泄放或断电重启</td>
+</tr>
+<tr>
+<td><code>voloo_set_nickname</code></td>
+<td>设置设备昵称</td>
+</tr>
+<tr>
+<td><code>voloo_get_log</code></td>
+<td>查看操作与故障记录</td>
+</tr>
+</tbody>
+</table>
+<p>如果只希望 Agent 查看设备，不允许它切换供电或改名，可在 voloo 的 <code>~/.voloo/config.toml</code> 中合并以下设置：</p>
+<pre><code class="language-toml">[mcp]
+read_only = true
+</code></pre>
+<p>这是 <strong>voloo 的设置</strong>，不是 Agent 的 MCP 配置。启用后，MCP 写入操作会被拒绝；需要临时阻止各客户端修改某台设备的供电或昵称时，可使用 <code>voloo lock 设备名</code>。</p>
+<h2 id="7-过压保护与恢复供电">7 过压保护与恢复供电</h2>
+<p><strong>有效 VIN 降到 30.0 V 以下时，过压保护锁定会自动解除；但输出仍保持关闭，不会自动恢复供电。</strong></p>
+<p>整个过程是：</p>
+<ol>
+<li><strong>发生过压：</strong> 有效 VIN 测量值 &gt; 30.5 V 时，固件关闭已有输出，并禁止新的开启操作。</li>
+<li><strong>电压恢复：</strong> 有效 VIN &lt; 30.0 V 时，固件自动解除过压保护锁定，不需要额外的复位或解锁命令。此时输出仍为 <strong>OFF</strong>。</li>
+<li><strong>用户重新开启：</strong> 先确认输入已回到标称 <strong>3.3–28 V</strong> 范围，极性、供电方式与电流限制均正确，再在仪表盘长按“开启供电”、发送新的 <code>voloo on bench-a</code> 命令，或明确让 Agent 开启目标设备，才会重新接通输出。</li>
+</ol>
+<p>这里不是要求按硬件按钮，而是必须重新发起一次开启操作。网页、CLI、脚本和 Agent 发送的<strong>新开启命令</strong>都可以；固件不会自行重新开启。</p>
+<p>之前的 ON 状态和过压期间被拒绝的开启命令都不会自动恢复或重放。这样可以避免电源电压一恢复，负载就意外启动。</p>
+<table>
+<thead>
+<tr>
+<th>有效 VIN 与过压状态</th>
+<th>过压保护锁定</th>
+<th>输出状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VIN &gt; 30.5 V</td>
+<td>自动锁定</td>
+<td>自动关闭；禁止开启</td>
+</tr>
+<tr>
+<td>过压后 VIN 仍 ≥ 30.0 V</td>
+<td>保持锁定</td>
+<td>保持关闭</td>
+</tr>
+<tr>
+<td>过压后 VIN &lt; 30.0 V</td>
+<td><strong>自动解除</strong></td>
+<td><strong>仍保持关闭</strong></td>
+</tr>
+<tr>
+<td>电压恢复后，用户发送新的开启命令且其他条件满足</td>
+<td>已解除</td>
+<td>才重新开启</td>
+</tr>
+</tbody>
+</table>
+<p>这里的<strong>过压保护锁定</strong>与 <code>voloo lock</code> / <code>voloo unlock</code> 的<strong>操作锁</strong>是两回事。不要用 <code>voloo unlock</code> 来“复位过压保护”；它不负责解除过压。若你另外设置了操作锁，则仍需按用途处理该操作锁。</p>
+<p>VIN 无效或采样过期时也会禁止开启并关闭已有输出。过压关断<strong>不会自动开始主动泄放</strong>。保护依赖固件的有效 VIN 测量值，软件阈值不等同于硬件瞬态钳位；正常使用仍按 <strong>3.3–28 V</strong> 标称工作范围。</p>
+<p>固件维护方法见 <a href="https://github.com/librezoo/voloo/blob/main/docs/firmware-updates.md">USB 固件说明</a>。维护时只使用适用于目标设备的升级包，并保留身份核验和安全检查。</p>
+<h2 id="8-在脚本和程序中调用">8 在脚本和程序中调用</h2>
+<p>最简单的方式是调用 CLI，并检查退出码。以下 Python 示例会在命令失败时停止，不会自动重试：</p>
+<pre><code class="language-python">import subprocess
+
+subprocess.run(
+    ["voloo", "cycle", "bench-a", "--off-ms", "2000"],
+    check=True,
+)
+</code></pre>
+<p>需要结构化数据时，使用 <code>voloo --json status bench-a</code> 等命令。其他语言也可以调用同一个 CLI，无需重新实现设备协议。</p>
+<p>也可以使用本机 HTTP API：</p>
+<pre><code class="language-sh">voloo api-info --json
+</code></pre>
+<p>它会提供当前 API 地址、访问令牌和接口说明位置。后台进程重启后，地址和令牌可能变化，程序应在启动时重新读取。</p>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /v1/devices</code></td>
+<td>读取设备列表</td>
+</tr>
+<tr>
+<td><code>POST /v1/devices/设备名/power</code></td>
+<td>控制供电</td>
+</tr>
+<tr>
+<td><code>POST /v1/devices/设备名/cycle</code></td>
+<td>断电重启</td>
+</tr>
+<tr>
+<td><code>GET /v1/events</code></td>
+<td>订阅状态和事件</td>
+</tr>
+<tr>
+<td><code>/openapi.json</code></td>
+<td>完整接口说明</td>
+</tr>
+</tbody>
+</table>
+<p>请求需要带 <code>Authorization: Bearer 令牌</code>。API 仅用于这台电脑，不是局域网服务；不要将令牌或本机登录链接发给其他人。详细 HTTP 示例见 <a href="guide.en.html#5-your-own-programs">英文说明</a>。</p>
+<h2 id="9-常见问题">9 常见问题</h2>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>处理方法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>voloo ls</code> 没有设备</td>
+<td>运行 <code>voloo doctor</code>；换一根支持数据的 USB 线，检查 USB 口和系统权限</td>
+</tr>
+<tr>
+<td>Linux 提示串口权限不足</td>
+<td>按 <code>voloo doctor</code> 的提示处理串口用户组；常见为 <code>dialout</code>，部分发行版使用 <code>uucp</code>，修改后重新登录</td>
+</tr>
+<tr>
+<td>提示端口被其他程序占用</td>
+<td>关闭占用串口的其他工具或浏览器串口页面</td>
+</tr>
+<tr>
+<td>离线或没有响应</td>
+<td>先检查连接，再执行 <code>voloo status 设备名</code>；USB 断线不代表输出已关断，设备会保留原来的输出状态</td>
+</tr>
+<tr>
+<td>VIN / VOUT 无法读取</td>
+<td>这不是 0 V；检查独立电源、接线和接地</td>
+</tr>
+<tr>
+<td>泄放超时</td>
+<td>检查是否有其他电源、USB、调试器或电池给设备反向供电；查看负载和故障提示</td>
+</tr>
+<tr>
+<td>操作结果为 unknown</td>
+<td>先读取状态，不要盲目重复操作</td>
+</tr>
+<tr>
+<td>改名失败</td>
+<td>确认目标设备正确、输出完全关断且空闲，并检查昵称是否超过 24 个 UTF-8 字节</td>
+</tr>
+<tr>
+<td>Agent 找不到工具</td>
+<td>检查本地 MCP 服务是否启用、<code>voloo</code> 是否在客户端能找到的路径中，以及配置文件是否写到了正确的位置</td>
+</tr>
+</tbody>
+</table>
+<p>需要提供问题记录时：</p>
+<pre><code class="language-sh">voloo report
+</code></pre>
+<p>命令只在本机生成诊断文件，不会自动发送。发送给他人前，先打开文件确认内容适合分享。</p>
+<h2 id="10-后台进程和本地文件">10 后台进程和本地文件</h2>
+<p>CLI、仪表盘、MCP 和 HTTP API 共用一个本机后台进程来管理 USB 端口。它会按需启动；没有客户端使用时，默认空闲 10 分钟后退出。启动或停止后台进程都不会改变设备输出。</p>
+<pre><code class="language-sh">voloo daemon status
+voloo daemon stop
+</code></pre>
+<p>默认配置保存在 <code>~/.voloo/config.toml</code>，日志保存在 <code>~/.voloo/logs/</code>，诊断报告保存在 <code>~/.voloo/reports/</code>。设置 <code>VOLOO_HOME</code> 可以更换存放目录。</p>
+<p>停止后台进程、关闭浏览器或拔下 USB 都不能代替明确的关断和状态确认。结束使用前，按负载需要执行关断或泄放，并确认结果。</p>
+</main></body></html>

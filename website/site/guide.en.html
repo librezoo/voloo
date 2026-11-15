@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><link href="data:," rel="icon"/><title>voloo User Guide</title><style>
+:root{color-scheme:light}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{max-width:900px;margin:30px auto;padding:0 22px 80px;font:17px/1.85 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#2d1a2b;background:#f5f1e9;overflow-wrap:anywhere}
+.page-nav{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;border-bottom:2px solid #2d1a2b;padding-bottom:16px;margin-bottom:28px;font-size:15px}
+h1{font-size:38px;line-height:1.35;letter-spacing:-.03em;margin:0 0 24px}h2{margin-top:50px;font-size:27px;line-height:1.5;border-bottom:2px solid #b49cf0;padding-bottom:8px}h3{margin-top:34px;font-size:21px;line-height:1.6}p,ul,ol{margin:18px 0}li+li{margin-top:8px}a{color:#5e43b7;text-underline-offset:3px}strong{font-weight:750}
+pre{background:#241622;color:#fffdf8;padding:20px;border-radius:14px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.87em}p code,li code,td code{background:rgba(94,67,183,.07);padding:2px 4px;border-radius:4px}pre code{font-size:14px;background:transparent;padding:0}
+table{border-collapse:collapse;width:100%;font-size:15px;line-height:1.75;margin:22px 0}th,td{border:1px solid #c7bcc5;text-align:left;padding:10px 12px;vertical-align:top}th{background:#fec600}td{background:#fffdf8}blockquote{margin:22px 0;padding:2px 22px;border-left:5px solid #5fc49a;background:#fffdf8;border-radius:0 10px 10px 0}
+img{display:block;max-width:100%;height:auto;margin:24px auto 0;border-radius:14px;border:1px solid #c7bcc5}.figure-link{display:block}.figure-link:focus-visible{outline:3px solid #3fb2ff;outline-offset:4px}p:has(>em:only-child){font-size:14px;line-height:1.75;color:#65545f;margin-top:12px}em{font-style:normal}
+@media(max-width:600px){body{margin-top:18px;padding:0 18px 50px;font-size:16px}h1{font-size:30px}h2{font-size:24px;margin-top:38px}th,td{padding:7px;font-size:14px}table{display:block;overflow-x:auto}pre{padding:16px}img{border-radius:10px}}
+@media print{body{max-width:none;padding:0;font-size:11pt;background:white}.page-nav{display:none}h2,h3{break-after:avoid}pre,blockquote,img{break-inside:avoid}img{max-height:230mm;object-fit:contain}a{color:inherit}}
+</style><style id="locale-style">
+.locale-link{display:inline-flex;align-items:center;justify-content:center;flex:none;padding:7px 10px;border:1px solid currentColor;border-radius:999px;font:600 13px/1.2 system-ui,sans-serif;text-decoration:none;white-space:nowrap}
+@media(max-width:640px){.bar .wrap{gap:10px}.bar .brand img{width:min(48vw,244px);height:auto}.bar .product-category{display:none}.bar .theme-toggle{flex:none}.bar .locale-link{margin-left:auto}.bar .brand{margin-right:auto}}
+</style><link href="guide.html" hreflang="zh-CN" rel="alternate"/><link href="guide.en.html" hreflang="en" rel="alternate"/><link href="https://voloo.librezoo.com/guide.en.html" rel="canonical"/><link href="assets/fonts/fonts.css" rel="stylesheet"/>
+</head><body><nav class="page-nav"><a href="index.en.html">← voloo</a><a class="locale-link" href="guide.html" hreflang="zh-CN" lang="zh-CN">中文</a><a href="downloads.en.html" id="downloads-link">Downloads</a></nav><main><h1 id="voloo-user-guide">voloo user guide</h1>
+<p><a href="guide.html">中文图文说明</a> · <a href="quick-start.en.html">Illustrated quick start</a> · <a href="https://voloo.librezoo.com/index.en.html">Website</a></p>
+<p>voloo switches the power of a connected device (the load) on and off, from your
+computer, over one USB cable. The USB cable carries control only: the load's power
+comes from your own supply through voloo's SOURCE terminals. voloo switches it; it is
+not a power source.</p>
+<p>Three things to keep in mind:</p>
+<ul>
+<li><strong>Off is not 0 V.</strong> Turning the output off disconnects the supply, but the load can
+keep its charge. <strong>Discharge</strong> turns off and actively drains the load until VOUT ≤ 1 V
+is confirmed.</li>
+<li><strong>A reading of “—” or “unreadable” is invalid, never zero volts.</strong></li>
+<li><strong>If a result is “unknown”, read the state before doing anything else.</strong> voloo never
+repeats a power command on its own after a lost reply.</li>
+</ul>
+<h2 id="tested-operating-range-and-overvoltage-protection">Tested operating range and overvoltage protection</h2>
+<p>The nominal input range is <strong>3.3–28 V DC</strong>. Operation with a <strong>3 A constant-current load</strong> in this range has been tested. The <strong>maximum recommended load current is 3 A; exceeding 3 A can damage the hardware.</strong> This condition does not establish support for arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.</p>
+<p>Load power is <code>P = V × I</code>: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.</p>
+<p>The firmware inhibits ON and turns off existing output when <strong>valid measured VIN &gt; 30.5 V</strong>. At <strong>valid VIN &lt; 30.0 V, the overvoltage latch clears automatically</strong>, but output <strong>stays OFF</strong>. No overvoltage reset command is needed. After returning to the nominal input range and checking the wiring and current, the user must explicitly press and hold <strong>Switch On</strong>, send a new <code>voloo on DEV</code> command, or ask the agent to switch that device on. Earlier ON state and rejected commands are never automatically resumed. The overvoltage latch is separate from the user operation lock set by <code>voloo lock</code>; <code>voloo unlock</code> does not reset overvoltage protection. Invalid or stale VIN also inhibits/cancels ON. Overvoltage shutdown does not automatically discharge. These are software measurement thresholds, not validated physical clamp voltages or response-time guarantees, and they do not raise the 28 V nominal upper limit.</p>
+<h2 id="before-connecting-power">Before connecting power</h2>
+<ul>
+<li><strong>Reversed supply polarity damages the hardware.</strong> Verify + / − before wiring and turn the supply output off before connecting it.</li>
+<li><strong>Do not power both the load supply and the USB host computer from the same adapter.</strong> Use independent supply A for voloo IN / the load and another independent supply B for the operating computer. Different output ports on one multiport adapter do not count as independent supplies. Do not take load power from the host computer's USB port.</li>
+<li><strong>3 A is the maximum recommended current. Higher current can damage the hardware.</strong> This applies at every operating voltage: for example, 12 V × 4 A = 48 W still exceeds the current limit even though it is below 84 W. Set an appropriate external current limit no higher than 3 A; voloo does not actively limit current.</li>
+</ul>
+<h2 id="spring-terminal-wiring-and-removal">Spring-terminal wiring and removal</h2>
+<p>The orange actuator opens the wire clamp; it is <strong>not the power switch</strong>. Control power using the dashboard, CLI or agent. The terminal stays attached to voloo; do not remove it or look for a screw.</p>
+<p><strong>Make both ends unpowered before handling wires.</strong> If residual voltage remains, keep USB connected and discharge until VOUT ≤ 1 V is confirmed. Then turn off and disconnect the external supply, unplug USB-C, and verify the input and device ends are unpowered.</p>
+<ol>
+<li><strong>Strip 11 mm</strong> from untreated wire, per the <a href="https://www.lcsc.com/datasheet/C475134.pdf">KEFA KF142V-5.08 drawing (LCSC C475134)</a>. Keep strands together; check prepared ends fit.</li>
+<li><strong>Press and hold</strong> the matching orange actuator <strong>toward the circuit board</strong> to open the clamp.</li>
+<li><strong>Keep pressing and insert</strong> the conductor fully into the adjacent <strong>green round hole</strong>. Orange openings and narrow green slots are not wire entries.</li>
+<li><strong>Release, then gently tug</strong> to check the grip. No bare copper should remain outside the hole.</li>
+</ol>
+<p><img alt="Hold the matching orange actuator toward the circuit board" src="assets/guide/terminal-step-1.svg"/></p>
+<p><img alt="Keep pressing and insert into the adjacent green round hole" src="assets/guide/terminal-step-2.svg"/></p>
+<p><img alt="Release and gently tug to check the clamp" src="assets/guide/terminal-step-3.svg"/></p>
+<p>To remove a wire, make both ends unpowered, hold the matching orange actuator and withdraw along the entry direction. Do not yank the wire or pry the actuator. These diagrams illustrate the mechanism, not fixed polarity positions. Follow physical IN / OUT and + / − markings: the illustrated leads use red for positive and black for negative. Component ratings do not change the system limits of <strong>3.3–28 V DC and 3 A maximum recommended current</strong>.</p>
+<h2 id="1-install">1. Install</h2>
+<p>You need any USB cable that carries data (USB-A or USB-C to USB-C, USB 2.0 or 3.0).
+The device uses system USB CDC drivers; no vendor-specific driver is required. Serial access may still need permission setup.</p>
+<table>
+<thead>
+<tr>
+<th>With</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>npm (Node 18+)</td>
+<td><code>npm install -g @librezoo/voloo</code> — or run without installing: <code>npx @librezoo/voloo ls</code></td>
+</tr>
+<tr>
+<td>A downloaded binary</td>
+<td>put <code>voloo</code> (<code>voloo.exe</code>) on your <code>PATH</code></td>
+</tr>
+</tbody>
+</table>
+<p>On Linux, add yourself to the serial group once and log in again:
+<code>sudo usermod -aG dialout $USER</code> (<code>uucp</code> on Arch). <code>voloo doctor</code> tells you if this is
+needed.</p>
+<p>No hardware yet? <code>voloo demo</code> opens the dashboard with simulated devices.</p>
+<h2 id="2-first-steps">2. First steps</h2>
+<pre><code class="language-sh">voloo ls                         # every connected voloo, its state and readings
+voloo on bench-a                 # by nickname…
+voloo off 5E-11-D0-00-00-00-00-01   # …or by UID
+voloo discharge bench-a          # off, then drain the load to ≤ 1 V
+voloo cycle bench-a --off-ms 2000   # discharge, wait 2 s, on
+voloo name 5E-11-D0-00-00-00-00-01 bench-a   # nickname (output must be off)
+voloo ui                         # dashboard in your browser
+</code></pre>
+<p>Each command reads the device back and reports what it confirmed. Add <code>--json</code> for
+programs. Exit codes: <code>0</code> done (or already so), <code>2</code> the device reported a failure,
+<code>3</code> outcome unknown or not connected — check <code>voloo status</code> first, <code>4</code> bad argument or
+device not found, <code>5</code> busy, locked or port in use.</p>
+<p>A small background process owns the USB ports so that the terminal, the dashboard, AI
+agents and your programs can all use a voloo at the same time. It starts by itself,
+listens on 127.0.0.1 only, and exits 10 minutes after the last client. Starting or
+stopping it never changes an output. <code>voloo daemon status</code> / <code>voloo daemon stop</code>.</p>
+<h2 id="3-dashboard">3. Dashboard</h2>
+<p><code>voloo ui</code> opens a one-time link (valid for 60 seconds) in your browser. Each device
+shows its state, the output (VOUT) and input (VIN) voltages, the last minute of VOUT
+and anything that needs attention.</p>
+<ul>
+<li><strong>Switch:</strong> press and hold the switch icon (or a button in the device view) for about
+half a second. The blade closes as you hold; let go early and nothing happens.</li>
+<li><strong>Device view:</strong> click a device for the larger readout, Discharge and Power Cycle,
+renaming, locking and details.</li>
+<li><strong>Lock:</strong> a locked device refuses every change from every client — dashboard,
+terminal, AI agents and programs — until you unlock it. <code>voloo lock bench-a</code> /
+<code>voloo unlock bench-a</code> do the same from the terminal.</li>
+<li><strong>Unknown result:</strong> power controls stay disabled until <strong>Check state</strong> reads fresh
+device state successfully. A lost browser connection never triggers an automatic retry.</li>
+<li><strong>Language and appearance:</strong> choose English, 简体中文 or 繁體中文, and system,
+light or dark appearance in the header. Preferences are saved in this browser.</li>
+</ul>
+<h2 id="4-ai-agents-mcp">4. AI agents (MCP)</h2>
+<p>voloo provides a local stdio MCP server, started with <code>voloo mcp</code>. The entries below are configuration examples; file locations and approval settings depend on the client version.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Setup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Claude Code</td>
+<td><code>claude mcp add voloo -- voloo mcp</code></td>
+</tr>
+<tr>
+<td>Codex CLI</td>
+<td><code>~/.codex/config.toml</code>: <code>[mcp_servers.voloo]</code> then <code>command = "voloo"</code> and <code>args = ["mcp"]</code></td>
+</tr>
+<tr>
+<td>Cursor</td>
+<td><code>~/.cursor/mcp.json</code>: <code>{"mcpServers": {"voloo": {"command": "voloo", "args": ["mcp"]}}}</code></td>
+</tr>
+<tr>
+<td>VS Code (Copilot)</td>
+<td>Workspace-root <code>.mcp.json</code>: <code>{"mcpServers": {"voloo": {"type": "stdio", "command": "voloo", "args": ["mcp"], "tools": ["*"]}}}</code></td>
+</tr>
+<tr>
+<td>Gemini CLI</td>
+<td><code>~/.gemini/settings.json</code>: <code>{"mcpServers": {"voloo": {"command": "voloo", "args": ["mcp"]}}}</code></td>
+</tr>
+<tr>
+<td>Other local stdio MCP clients</td>
+<td>configure the same <code>command</code> / <code>args</code> pair according to the client documentation</td>
+</tr>
+</tbody>
+</table>
+<p>Without a global install, clients that support executable arguments can use <code>command: "npx"</code> with <code>args: ["-y", "@librezoo/voloo", "mcp"]</code>. Configuration paths and executable lookup depend on the client and operating system.</p>
+<p>The agent gets five tools: <code>voloo_list_devices</code>, <code>voloo_get_status</code>, <code>voloo_power</code>
+(<code>on</code>, <code>off</code>, <code>discharge</code>, <code>cycle</code>), <code>voloo_set_nickname</code> and <code>voloo_get_log</code>. To let
+agents look but not switch, add to <code>~/.voloo/config.toml</code>:</p>
+<pre><code class="language-toml">[mcp]
+read_only = true
+</code></pre>
+<p>Tools that speak MCP over HTTP can use <code>http://127.0.0.1:&lt;port&gt;/mcp</code> with the header
+<code>Authorization: Bearer &lt;token&gt;</code> (see the next section for both values).</p>
+<h2 id="5-your-own-programs">5. Your own programs</h2>
+<p>Any language can use the local HTTP API. Get the address and token with
+<code>voloo api-info --json</code> (this also starts the background process), or read
+<code>~/.voloo/daemon.json</code>. The token changes whenever the process restarts, so read it at
+startup. The full API is at <code>/openapi.json</code>; you can generate a client from it.</p>
+<p><strong>Shell</strong></p>
+<pre><code class="language-sh">voloo --json status bench-a | jq .vout_mv
+voloo on bench-a || echo "exit $? — see the table in section 2"
+</code></pre>
+<p><strong>Python</strong> (standard library only)</p>
+<pre><code class="language-python">import json, subprocess, urllib.request, urllib.error
+
+api = json.loads(subprocess.check_output(["voloo", "api-info", "--json"]))
+
+def call(method, path, body=None):
+    req = urllib.request.Request(api["url"] + path, method=method,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"Authorization": f"Bearer {api['token']}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(json.load(e)["error"]) from None  # code, message, trace_id, faults
+
+print(call("GET", "/v1/devices"))
+r = call("POST", "/v1/devices/bench-a/power", {"action": "on"})
+print(r["outcome"], r["status"]["vout_mv"])
+</code></pre>
+<p><strong>JavaScript</strong> (Node 18+)</p>
+<pre><code class="language-js">import { execFileSync } from 'node:child_process';
+const api = JSON.parse(execFileSync('voloo', ['api-info', '--json']));
+const call = async (method, path, body) =&gt; {
+  const res = await fetch(api.url + path, { method, body: body &amp;&amp; JSON.stringify(body),
+    headers: { Authorization: `Bearer ${api.token}`, 'Content-Type': 'application/json' } });
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(data.error.message), data.error);
+  return data;
+};
+console.log(await call('POST', '/v1/devices/bench-a/cycle', { off_ms: 1000 }));
+</code></pre>
+<p><strong>Java</strong> (11+)</p>
+<pre><code class="language-java">var client = java.net.http.HttpClient.newHttpClient();
+var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url + "/v1/devices/bench-a/power"))
+    .header("Authorization", "Bearer " + token).header("Content-Type", "application/json")
+    .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"action\":\"off\"}")).build();
+var res = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+System.out.println(res.statusCode() + " " + res.body());
+</code></pre>
+<p><strong>C / C++</strong> (libcurl)</p>
+<pre><code class="language-c">struct curl_slist *h = curl_slist_append(NULL, auth_header);  /* "Authorization: Bearer &lt;token&gt;" */
+h = curl_slist_append(h, "Content-Type: application/json");
+curl_easy_setopt(curl, CURLOPT_URL, "http://127.0.0.1:&lt;port&gt;/v1/devices/bench-a/power");
+curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h);
+curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "{\"action\":\"discharge\"}");
+curl_easy_perform(curl);
+</code></pre>
+<p><strong>Live updates</strong> come as server-sent events from <code>GET /v1/events</code> (<code>status</code>,
+<code>device.added</code>, <code>device.removed</code>, <code>operation.finished</code>, <code>fault.raised</code>, …):
+<code>curl -N -H "Authorization: Bearer $TOKEN" $URL/v1/events</code>.</p>
+<p>HTTP status codes follow the exit codes: 400/404 bad request or not found, 409 busy or
+locked, 502 the device reported a failure, 503 not connected, 504 outcome unknown (read
+the state before acting). Requests must come from this computer; pages on other sites
+cannot reach the API.</p>
+<h2 id="6-settings">6. Settings</h2>
+<p><code>~/.voloo/config.toml</code> (all optional):</p>
+<pre><code class="language-toml">idle_exit_s = 600                 # background process lifetime without clients
+[mcp]
+read_only = false                 # true: agents can read but not switch
+[devices."5E-11-D0-00-00-00-00-01"]
+locked = true                     # nobody can switch this device (lift it here)
+[[ports]]                         # a port USB discovery does not report
+path = "/dev/ttyUSB3"
+uid = "5E-11-D0-00-00-00-00-01"
+</code></pre>
+<p><code>VOLOO_HOME</code> moves everything (settings, logs, reports) to another directory.</p>
+<h2 id="7-when-something-is-wrong">7. When something is wrong</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nothing listed</td>
+<td><code>voloo doctor</code>. Try another cable (charge-only cables have no data lines) or port.</td>
+</tr>
+<tr>
+<td>“Port in use by another app”</td>
+<td>Close the other program using the port (a browser serial page, another tool).</td>
+</tr>
+<tr>
+<td>Offline / “Not responding”</td>
+<td>The output keeps its last state. Reconnect the cable, then <code>voloo status</code>.</td>
+</tr>
+<tr>
+<td>VIN or VOUT “unreadable”</td>
+<td>Not 0 V. Check the SOURCE wiring and the board's ground connection.</td>
+</tr>
+<tr>
+<td>“Discharge timed out”</td>
+<td>Something keeps VOUT above 1 V (another supply, a large capacitor). Check the load.</td>
+</tr>
+<tr>
+<td>Result unknown</td>
+<td><code>voloo status</code> first. Do not repeat the command blindly.</td>
+</tr>
+</tbody>
+</table>
+<p><code>voloo faults</code> lists problems with the suggested next step. <code>voloo log</code> shows the
+history of every switch with who did it (terminal, web, AI agent or API).</p>
+<p><strong>Reporting a problem:</strong> <code>voloo report</code> writes one file under <code>~/.voloo/reports/</code> with
+versions, device states and registers, recent faults and logs, and your settings. It
+contains no token, host name or user name, and nothing is sent anywhere; open it to
+check it, then attach it to your message.</p>
+<h2 id="usb-firmware-maintenance">USB firmware maintenance</h2>
+<p>Open a device's details in the dashboard and use <strong>USB firmware</strong>, or run:</p>
+<pre><code class="language-sh">voloo firmware status DEV
+voloo firmware update DEV
+voloo firmware update DEV /path/to/firmware.voloofw  # optional offline file
+voloo firmware rollback DEV
+</code></pre>
+<p>Online updating downloads the encrypted firmware paired with this CLI release,
+then deletes its temporary file after verification or handled failure. Use a
+compatible device and the recommended package; contact support if it is refused.</p>
+<p>The background process handles port ownership and reconnection automatically.
+The output must already be OFF with valid readings and VOUT &lt;= 1 V; locks still
+apply, and the old ON state is never resumed. A/B trials are confirmed only after
+identity, version, nickname and state verification; failed trials restore the
+previous confirmed image. Read <a href="https://github.com/librezoo/voloo/blob/main/docs/firmware-updates.md">firmware updates</a> for prerequisites and recovery boundaries.</p>
+<h2 id="8-building-the-packages-maintainers">8. Building the packages (maintainers)</h2>
+<pre><code class="language-sh">node packaging/npm/build.mjs                      # dist/npm: @librezoo/voloo + @librezoo/voloo-&lt;platform&gt;
+(cd packaging/pypi &amp;&amp; uvx maturin==1.15.0 build --release --out ../../dist/pypi)
+sh packaging/check-install.sh                     # installs both into throw-away places and runs them
+</code></pre>
+<p>Each platform's binary is built on that platform (or in CI) and the platform packages
+are published together with the <code>voloo</code> launcher package.</p>
+</main></body></html>

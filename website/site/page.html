@@ -1,0 +1,1022 @@
+<title>voloo 电源开关</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M8 8h16v32h32v16H8z' fill='%232d1a2b'/%3E%3Ccircle cx='47' cy='17' r='10' fill='%23c8d22a'/%3E%3C/svg%3E">
+<meta name="description" content="voloo：用一根 USB-C 线，让电脑、脚本和 AI Agent 控制设备的供电。开、关、主动泄放、断电重启，每一步都读回确认。">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<style>
+/* Layout concept: a Memphis-era bench poster. Thick ink outlines, hard offset shadows,
+   the enclosure's own colours (yellow lid, deep-purple base, terminal mint) and the LibreZoo dot
+   that follows the cursor. Sections are tilted paper sheets stacked on a dotted bench mat. */
+:root {
+  --ground: #f5f1e9;      /* LibreZoo paper */
+  --sheet: #fffdf8;
+  --ink: #2d1a2b;         /* LibreZoo ink */
+  --ink-2: rgb(45 26 43 / 70%);
+  --ink-3: rgb(45 26 43 / 45%);
+  --hard: #2d1a2b;        /* hard offset shadow */
+  --lid: #fec600;         /* enclosure lid */
+  --base: #5e43b7;
+  --lilac: #b49cf0;       /* lighter graphic backdrop */
+  --mint: #5fc49a;        /* terminal block */
+  --volt: #c8d22a;        /* olive dot, electric */
+  --coral: #ff5a4e;
+  --sky: #3fb2ff;
+  --apricot: #ff9442;
+  --scope: #1e121d;       /* oscilloscope glass, dark in both themes */
+  --scope-ink: #f5f1e9;
+  --dotgrid: rgb(45 26 43 / 10%);
+
+  --display: "Unbounded", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  --cjk: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --radius: 18px;
+  --line: 3px;
+  --spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #170e16; --sheet: #241622; --ink: #f5f1e9; --ink-2: rgb(245 241 233 / 72%); --ink-3: rgb(245 241 233 / 45%);
+    --hard: #000000; --lid: #ffcf3a; --base: #a988ff; --mint: #3fd99a; --volt: #dbe63c; --coral: #ff6b5f;
+    --sky: #4cbcff; --apricot: #ff9a4d; --scope: #0e070d; --dotgrid: rgb(245 241 233 / 8%); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #170e16; --sheet: #241622; --ink: #f5f1e9; --ink-2: rgb(245 241 233 / 72%); --ink-3: rgb(245 241 233 / 45%);
+  --hard: #000000; --lid: #ffcf3a; --base: #a988ff; --mint: #3fd99a; --volt: #dbe63c; --coral: #ff6b5f;
+  --sky: #4cbcff; --apricot: #ff9a4d; --scope: #0e070d; --dotgrid: rgb(245 241 233 / 8%); color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+section[id], main[id] { scroll-margin-top: 88px; }
+body {
+  margin: 0; overflow-x: hidden;
+  background: var(--ground);
+  background-image: radial-gradient(circle, var(--dotgrid) 1.3px, transparent 1.6px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font: 16px/1.65 var(--cjk);
+  -webkit-font-smoothing: antialiased;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--ground); }
+img { max-width: 100%; height: auto; display: block; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--sky); outline-offset: 3px; border-radius: 6px; }
+.wrap { width: min(1180px, 100%); margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.mono { font-family: var(--mono); }
+.nowrap { white-space: nowrap; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+
+/* ---------- shared pieces ---------- */
+.sheet { background: var(--sheet); border: var(--line) solid var(--ink); border-radius: var(--radius); box-shadow: 8px 8px 0 var(--hard); }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; display: inline-flex; gap: 10px; align-items: center; }
+.eyebrow::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--volt); border: 2px solid var(--ink); }
+.h2 { font: 900 clamp(28px, 5.4vw, 64px)/1.16 var(--cjk); letter-spacing: -.02em; }
+.h2 .lat { font-family: var(--display); font-weight: 900; }
+.lede { font-size: clamp(16px, 1.6vw, 19px); color: var(--ink-2); max-width: 60ch; }
+.btn {
+  display: inline-flex; align-items: center; gap: 10px; padding: 14px 20px; border: var(--line) solid var(--ink); border-radius: 999px;
+  background: var(--sheet); font-weight: 700; text-decoration: none; cursor: pointer; box-shadow: 4px 4px 0 var(--hard);
+  transition: transform .18s var(--spring), box-shadow .18s var(--ease);
+}
+.btn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--hard); }
+.btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--hard); }
+.btn.primary { background: var(--lid); color: #2d1a2b; }
+.btn.warn { background: var(--coral); color: #fff; }
+.chip { font: 500 13px/1 var(--mono); padding: 8px 12px; border: 2px solid var(--ink); border-radius: 999px; background: var(--sheet); white-space: nowrap; }
+section { position: relative; padding-block: clamp(72px, 10vw, 140px); }
+
+/* ---------- top bar ---------- */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50; background: color-mix(in srgb, var(--ground) 86%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid color-mix(in srgb, var(--ink) 16%, transparent); }
+.bar .wrap { display: flex; align-items: center; gap: 24px; padding-block: 10px; }
+.brand { display: flex; flex: none; align-items: center; gap: 10px; font: 900 20px/1 var(--display); text-decoration: none; letter-spacing: -.02em; }
+.brand img { width: 244px; height: 50px; }
+.brand picture { display: block; }
+.brand .brand-on-dark { display: none; }
+:root[data-theme="dark"] .brand .brand-on-light { display: none; }
+:root[data-theme="dark"] .brand .brand-on-dark { display: block; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .brand .brand-on-light { display: none; } :root:not([data-theme="light"]) .brand .brand-on-dark { display: block; } }
+.product-category { margin-left: auto; text-align: right; color: var(--ink-2); font: 500 13px/1.45 var(--mono); }
+.product-category b { display: block; color: var(--ink); font: 500 13px/1.45 var(--cjk); margin-top: 4px; }
+@media (max-width: 640px) { .brand img { width: 244px; height: 50px; } .brand picture { margin-left: 0; } .product-category { display: none; } .bar .wrap { gap: 0; } .bar .theme-toggle { margin-left: auto; } }
+.theme-toggle { position: relative; width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; flex: none; }
+.theme-toggle::before { content: ""; position: absolute; inset: 6px; border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent); border-radius: 50%; }
+.theme-toggle svg { width: 18px; height: 18px; }
+
+
+/* ---------- hero ---------- */
+.hero { padding-block: clamp(36px, 6vw, 80px) clamp(56px, 8vw, 100px); overflow: hidden; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: clamp(24px, 4vw, 56px); align-items: center; }
+.hero h1 { font: 900 clamp(44px, 5.1vw, 72px)/1.18 var(--cjk); letter-spacing: -.04em; margin-top: 0; display: grid; gap: 6px; }
+.hero h1 .title-line { display: flex; align-items: center; height: 1.18em; }
+.hero .eyebrow { display: none; font: 500 13px/1.45 var(--cjk); letter-spacing: .04em; text-transform: none; color: var(--ink-2); }
+@media (max-width: 640px) { .hero .eyebrow { display: inline-flex; } .hero h1 { margin-top: 20px; } }
+@media (max-width: 860px) { .hero h1 { font-size: clamp(44px, 8vw, 64px); } }
+.hero h1 .word { white-space: nowrap; display: inline-block; position: relative; }
+.hero h1 .hl { display: inline-block; line-height: 1; margin-inline: .06em; position: relative; z-index: 0; color: #2d1a2b; }
+.hero h1 .hl::before { content: ""; position: absolute; inset: -.03em -.06em -.05em; z-index: -1; background: var(--lid); border: var(--line) solid var(--ink); border-radius: 12px; box-shadow: 4px 4px 0 var(--hard); transform: rotate(-2deg); }
+.hero h1 .lat { font-family: var(--display); letter-spacing: -.05em; }
+.hero .lede { margin-top: 24px; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 18px; align-items: center; }
+.install { display: inline-flex; align-items: stretch; gap: 0; border: var(--line) solid var(--ink); border-radius: 24px; background: var(--scope); color: var(--scope-ink); box-shadow: 4px 4px 0 var(--hard); overflow: hidden; max-width: 100%; }
+.install code { flex: 1; font: 500 15px/1.5 var(--mono); padding: 15px 16px 15px 20px; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.hero-install { margin-top: 30px; }
+.install code::before { content: "$ "; color: var(--volt); }
+.install button { border: 0; border-left: 2px solid rgb(245 241 233 / 25%); background: transparent; color: var(--scope-ink); padding: 15px 16px; cursor: pointer; font: 500 13px/1 var(--mono); }
+.install button:hover { background: rgb(245 241 233 / 10%); }
+.install button { white-space: nowrap; flex: none; }
+@media (max-width: 480px) { .install code { font-size: 12.5px; padding: 14px 10px 14px 14px; } .install button { padding: 14px 12px; } }
+.hero-note { margin-top: 18px; display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--ink-2); max-width: 52ch; }
+.hero-note b { color: var(--coral); }
+
+.stage { position: relative; aspect-ratio: 1 / 1; width: 100%; max-width: 620px; justify-self: center; perspective: 1200px; }
+.stage .blob { position: absolute; inset: 8% 4% 6% 6%; background: var(--lilac); border: var(--line) solid var(--ink); border-radius: 42% 58% 55% 45% / 48% 40% 60% 52%; box-shadow: 10px 10px 0 var(--hard); animation: morph 14s ease-in-out infinite alternate; }
+@keyframes morph { 50% { border-radius: 58% 42% 40% 60% / 40% 58% 42% 60%; } 100% { border-radius: 46% 54% 62% 38% / 55% 45% 55% 45%; } }
+.stage .tilt { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .5s var(--ease); }
+.stage .product { position: absolute; inset: 4% 2% 8% 2%; width: 96%; height: auto; filter: drop-shadow(5px 7px 0 #2d1a2b) drop-shadow(0 18px 10px rgb(45 26 43 / 15%)); transform: translateZ(60px); }
+.sticker { position: absolute; z-index: 3; width: 174px; min-height: 72px; padding: 12px 14px; border: var(--line) solid var(--ink); border-radius: 12px; box-shadow: 4px 4px 0 var(--hard); font: 800 16px/1.25 var(--display); color: #2d1a2b; }
+.sticker small { display: block; margin-top: 5px; font: 500 12px/1.4 var(--cjk); color: rgb(45 26 43 / 76%); }
+.sticker.s1 { top: 2%; left: 0; background: var(--mint); }
+.sticker.s2 { bottom: 2%; right: 0; background: var(--lid); }
+.shape { position: absolute; pointer-events: none; z-index: 0; }
+.tri { width: 0; height: 0; border-left: 34px solid transparent; border-right: 34px solid transparent; border-bottom: 58px solid var(--coral); filter: drop-shadow(4px 4px 0 var(--hard)); }
+.ring { width: 70px; height: 70px; border-radius: 50%; border: 10px solid var(--sky); outline: 3px solid var(--ink); outline-offset: -3px; }
+@media (max-width: 860px) {
+  .hero-grid { grid-template-columns: minmax(0, 1fr); }
+  .stage { max-width: 460px; margin-top: 12px; }
+}
+@media (max-width: 480px) {
+  .stage { aspect-ratio: 1 / 1.12; }
+  .sticker.s2 { bottom: 4%; right: 0; }
+
+}
+
+@media (max-width: 860px) { #cursor { display: none; } }
+
+/* ---------- ticker ---------- */
+.ticker-clip { overflow: hidden; padding-block: 18px; margin-block: -18px; }
+.ticker { border-block: var(--line) solid var(--ink); background: var(--ink); color: var(--ground); overflow: hidden; transform: rotate(-1.2deg); margin-inline: -20px; position: relative; z-index: 2; }
+.ticker .track { display: flex; width: max-content; animation: tick 38s linear infinite; }
+.ticker span { font: 800 clamp(18px, 2.4vw, 28px)/1 var(--display); padding: 16px 0; white-space: nowrap; display: flex; align-items: center; }
+.ticker span::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: var(--volt); margin-inline: 28px; flex: none; }
+.ticker:hover .track { animation-play-state: paused; }
+@keyframes tick { to { transform: translateX(-50%); } }
+
+/* ---------- bench simulator ---------- */
+.bench-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: end; margin-bottom: 36px; }
+.bench-head > .chip { justify-self: start; }
+.bench { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); gap: 22px; }
+.scope-card { background: var(--scope); color: var(--scope-ink); border: var(--line) solid var(--ink); border-radius: var(--radius); box-shadow: 8px 8px 0 var(--hard); overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.scope-top { display: flex; flex-wrap: wrap; gap: 18px 28px; padding: 18px 20px 6px; align-items: baseline; }
+.readout { display: flex; flex-direction: column; gap: 4px; }
+.readout .k { font: 500 11px/1 var(--mono); letter-spacing: .14em; color: rgb(245 241 233 / 55%); }
+.readout .v { font: 500 clamp(28px, 3.6vw, 42px)/1 var(--mono); font-variant-numeric: tabular-nums; }
+.readout .v small { font-size: .45em; color: rgb(245 241 233 / 60%); margin-left: 4px; }
+.state-pill { margin-left: auto; font: 800 13px/1 var(--display); letter-spacing: .06em; padding: 9px 14px; border-radius: 999px; border: 2px solid var(--scope-ink); text-transform: uppercase; align-self: center; }
+.state-pill[data-s="off"] { color: rgb(245 241 233 / 70%); }
+.state-pill[data-s="on"] { background: #dbe63c; color: #2d1a2b; border-color: #dbe63c; }
+.state-pill[data-s="discharging"] { background: #ff9442; color: #2d1a2b; border-color: #ff9442; }
+.state-pill[data-s="busy"] { background: #3fb2ff; color: #2d1a2b; border-color: #3fb2ff; }
+.state-pill[data-s="locked"] { background: #b49cf0; color: #2d1a2b; border-color: #b49cf0; }
+#scope { width: 100%; height: 260px; display: block; }
+.term { border-top: 2px solid rgb(245 241 233 / 14%); padding: 14px 18px 16px; font: 13.5px/1.6 var(--mono); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.term-out { height: 190px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: rgb(245 241 233 / 88%); scrollbar-width: thin; }
+.term-out .cmd { color: #dbe63c; }
+.term-out .ok { color: #3fd99a; }
+.term-out .warn { color: #ff9442; }
+.term-out .err { color: #ff6b5f; }
+.term-out .dim { color: rgb(245 241 233 / 50%); }
+.term form { display: flex; gap: 8px; align-items: center; }
+.term label { color: #dbe63c; }
+.term input { flex: 1; min-width: 0; background: transparent; border: 0; border-bottom: 1px dashed rgb(245 241 233 / 30%); color: var(--scope-ink); font: inherit; padding: 6px 2px; outline: none; }
+.term input:focus { border-bottom-color: #dbe63c; }
+.quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick button { max-width: 100%; overflow-wrap: anywhere; text-align: left; font: 500 12px/1.4 var(--mono); padding: 7px 10px; border-radius: 16px; border: 1px solid rgb(245 241 233 / 30%); background: transparent; color: var(--scope-ink); cursor: pointer; }
+.quick button:hover { background: rgb(245 241 233 / 12%); }
+
+.panel { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.switch-card { padding: 22px; display: flex; flex-direction: column; gap: 16px; align-items: center; text-align: center; }
+.switch-card h3 { font: 800 18px/1.2 var(--display); }
+.knife { width: 100%; max-width: 260px; aspect-ratio: 260 / 170; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; position: relative; border: 0; background: none; padding: 0; }
+.knife svg { width: 100%; height: 100%; overflow: visible; }
+.knife .post { fill: var(--sheet); stroke: var(--ink); stroke-width: 4; }
+.knife .wire { stroke: var(--ink); stroke-width: 6; stroke-linecap: round; }
+.knife .blade { transform-origin: 62px 120px; transition: transform .45s var(--spring); }
+.knife .lever { stroke: var(--ink); stroke-width: 12; stroke-linecap: round; }
+.knife .tip { fill: var(--ink-3); stroke: var(--ink); stroke-width: 4; transition: fill .3s; }
+.knife[data-s="off"] .blade { transform: rotate(-38deg); }
+.knife[data-s="on"] .tip { fill: var(--volt); }
+.knife[data-s="discharging"] .tip { fill: var(--apricot); }
+.knife[data-s="busy"] .tip { fill: var(--sky); }
+.knife .progress { fill: none; stroke: var(--sky); stroke-width: 6; stroke-linecap: round; stroke-dasharray: 0 400; opacity: 0; }
+.knife.holding .progress { opacity: 1; }
+.hint { font-size: 13px; color: var(--ink-2); min-height: 1.6em; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+.actions .btn { justify-content: center; padding: 11px 12px; font-size: 14px; box-shadow: 3px 3px 0 var(--hard); }
+.load-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.load-card .row { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 2px solid var(--ink); border-radius: 12px; overflow: hidden; }
+.seg button { border: 0; background: var(--sheet); padding: 9px 6px; cursor: pointer; font: 500 12px/1.2 var(--mono); }
+.seg button + button { border-left: 2px solid var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--lilac); color: #2d1a2b; }
+.load-card p { font-size: 13px; color: var(--ink-2); }
+@media (max-width: 920px) { .bench { grid-template-columns: minmax(0, 1fr); } .bench-head { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- pillars ---------- */
+.pillars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; margin-top: 48px; }
+.pillar { padding: 26px 24px 24px; display: flex; flex-direction: column; gap: 12px; transition: transform .3s var(--spring), box-shadow .3s var(--ease); transform: rotate(var(--r, 0deg)); min-width: 0; }
+.pillar:hover { transform: rotate(0deg) translate(-4px, -4px); box-shadow: 12px 12px 0 var(--hard); }
+.pillar .badge { width: 58px; height: 58px; border: var(--line) solid var(--ink); border-radius: 16px; display: grid; place-items: center; background: var(--c, var(--lid)); color: #2d1a2b; }
+.pillar .badge svg { width: 30px; height: 30px; }
+.pillar h3 { font: 900 22px/1.3 var(--cjk); }
+.pillar p { color: var(--ink-2); font-size: 15px; }
+.pillar code { font: 500 13px/1.5 var(--mono); background: var(--ground); border: 1.5px solid var(--ink-3); padding: 1px 6px; border-radius: 6px; }
+.pillar:nth-child(1) { --r: -1.2deg; --c: var(--lid); }
+.pillar:nth-child(2) { --r: .8deg; --c: var(--mint); }
+.pillar:nth-child(3) { --r: -.6deg; --c: var(--lilac); }
+.pillar:nth-child(4) { --r: 1deg; --c: var(--sky); }
+.pillar:nth-child(5) { --r: -.9deg; --c: var(--apricot); }
+.pillar:nth-child(6) { --r: .7deg; --c: var(--volt); }
+@media (max-width: 960px) { .pillars { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .pillars { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- agent ---------- */
+.agent { background: var(--lilac); border-block: var(--line) solid var(--ink); }
+.agent-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: clamp(24px, 5vw, 64px); align-items: center; }
+.agent .lede, .agent .h2, .agent .eyebrow { color: #2d1a2b; }
+.agent .eyebrow::before { border-color: #2d1a2b; }
+.mcp-setup { margin-top: 22px; min-width: 0; }
+.code .panel-note { margin: 0; padding-top: 12px; border-top: 1px solid rgb(245 241 233 / 20%); font: 14px/1.6 var(--cjk); color: var(--scope-ink); overflow-wrap: anywhere; }
+.agent .tabs button { background: #fffdf8; color: #2d1a2b; border-color: #2d1a2b; }
+.agent .tabs button[aria-selected="true"] { background: #2d1a2b; color: #fffdf8; }
+.chat { padding: 0; overflow: hidden; }
+.chat-top { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: var(--line) solid var(--ink); background: var(--lid); color: #2d1a2b; font: 800 13px/1 var(--display); }
+.chat-top i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #2d1a2b; background: #fffdf8; }
+.chat-top span { margin-left: 6px; }
+.chat-top button { margin-left: auto; font: 500 12px/1 var(--mono); border: 2px solid #2d1a2b; background: #fffdf8; color: #2d1a2b; border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+.chat-top button:disabled { opacity: .6; cursor: wait; }
+.chat-body { padding: 18px; display: flex; flex-direction: column; gap: 12px; font-size: 14.5px; min-height: 300px; }
+.msg { max-width: 92%; padding: 10px 14px; border: 2px solid var(--ink); border-radius: 14px; transition: opacity .35s, transform .35s var(--spring); }
+.msg.user { align-self: flex-end; background: var(--lid); color: #2d1a2b; border-bottom-right-radius: 4px; }
+.msg.bot { align-self: flex-start; background: var(--ground); border-bottom-left-radius: 4px; }
+.msg.tool { align-self: flex-start; font: 12.5px/1.55 var(--mono); background: var(--scope); color: var(--scope-ink); border-color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+.msg.tool b { color: #dbe63c; font-weight: 500; }
+.msg.hidden { opacity: 0; transform: translateY(10px); }
+@media (max-width: 860px) { .agent-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- usage scenarios ---------- */
+.use-cases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 40px; }
+.use-case { display: flex; flex-direction: column; padding: 28px; min-width: 0; }
+.use-case .n { font: 800 36px/1 var(--display); color: var(--ink-3); }
+.use-case h3 { font: 900 24px/1.3 var(--cjk); margin-top: 20px; }
+.use-case p { color: var(--ink-2); margin-top: 12px; margin-bottom: 20px; }
+.use-case code { display: block; margin-top: auto; padding: 12px; border: 2px solid var(--ink); border-radius: 10px; background: var(--ground); font: 500 12px/1.6 var(--mono); overflow-wrap: anywhere; }
+@media (max-width: 860px) { .use-cases { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- specs ---------- */
+.specs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: var(--line) solid var(--ink); border-radius: var(--radius); overflow: hidden; background: var(--sheet); box-shadow: 8px 8px 0 var(--hard); margin-top: 40px; }
+.spec { padding: 22px 20px; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.spec:nth-child(4n) { border-right: 0; }
+.spec:nth-last-child(-n+4) { border-bottom: 0; }
+.spec .k { font: 500 11px/1.2 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.spec .v { font: 800 clamp(20px, 2.2vw, 26px)/1.15 var(--display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.spec .d { font-size: 13px; color: var(--ink-2); }
+@media (max-width: 900px) {
+  .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .spec:nth-child(4n) { border-right: 2px solid var(--ink); }
+  .spec:nth-child(2n) { border-right: 0; }
+  .spec:nth-last-child(-n+4) { border-bottom: 2px solid var(--ink); }
+  .spec:nth-last-child(-n+2) { border-bottom: 0; }
+}
+@media (max-width: 560px) {
+  .specs { grid-template-columns: minmax(0, 1fr); }
+  .specs .spec { border-right: 0; border-bottom: 2px solid var(--ink); }
+  .specs .spec:last-child { border-bottom: 0; }
+}
+
+.usage-limits { margin-top: 28px; padding: 24px; }
+.usage-limits h3 { font: 900 22px/1.4 var(--cjk); }
+.limit-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 24px; margin-top: 14px; }
+.limit-line strong { font: 800 clamp(20px, 2.4vw, 28px)/1.4 var(--cjk); }
+.limit-line span { font-family: var(--mono); }
+.usage-limits p { margin-top: 12px; color: var(--ink-2); font-size: 15px; line-height: 1.75; }
+
+/* ---------- safety ---------- */
+.safety { background: var(--coral); border-block: var(--line) solid var(--ink); color: #fff; overflow: hidden; }
+.safety .stripes { position: absolute; inset: 0 0 auto; height: 22px; background: repeating-linear-gradient(-45deg, #2d1a2b 0 18px, #ffd34d 18px 36px); border-bottom: var(--line) solid #2d1a2b; }
+.safety .stripes.b { inset: auto 0 0; border-bottom: 0; border-top: var(--line) solid #2d1a2b; }
+.safety .eyebrow { color: #fff; }
+.safety .eyebrow::before { background: #ffd34d; border-color: #2d1a2b; }
+.safety .h2 { color: #fff; text-shadow: 4px 4px 0 #2d1a2b; }
+.safety .lede { color: rgb(255 255 255 / 92%); }
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 40px; }
+.rule { background: #fffdf8; color: #2d1a2b; border: var(--line) solid #2d1a2b; border-radius: var(--radius); box-shadow: 8px 8px 0 #2d1a2b; padding: 26px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.rule h3 { font: 900 clamp(22px, 2.6vw, 30px)/1.2 var(--cjk); display: flex; gap: 12px; align-items: center; }
+.rule h3 .big { flex: none; width: 52px; height: 52px; border-radius: 50%; background: #2d1a2b; color: #ffd34d; display: grid; place-items: center; font: 900 24px/1 var(--display); }
+.rule ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+.rule li::marker { color: #ff5a4e; }
+.rule .why { font-size: 14px; background: #f5f1e9; border: 2px dashed rgb(45 26 43 / 40%); border-radius: 12px; padding: 10px 14px; }
+.rule figure { margin: 0; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: center; }
+.rule figure img { width: 100%; max-width: 360px; justify-self: center; border: 2px solid #2d1a2b; border-radius: 12px; background: #ebe6dc; }
+.rule figcaption { font-size: 13px; color: rgb(45 26 43 / 75%); }
+.checker { margin-top: 28px; background: #2d1a2b; color: #f5f1e9; border: var(--line) solid #2d1a2b; border-radius: var(--radius); box-shadow: 8px 8px 0 #2d1a2b; padding: clamp(18px, 3vw, 30px); display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 26px; }
+.checker h3 { font: 800 20px/1.3 var(--display); color: #ffd34d; }
+.q { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+.q > span { font-size: 15px; font-weight: 700; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opts button { border: 2px solid #f5f1e9; background: transparent; color: #f5f1e9; border-radius: 999px; padding: 8px 14px; cursor: pointer; font-size: 14px; }
+.opts button[aria-pressed="true"] { background: #f5f1e9; color: #2d1a2b; font-weight: 700; }
+.verdict { border: var(--line) solid #f5f1e9; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 10px; justify-content: center; transition: background .3s; min-width: 0; }
+.verdict[data-v="ok"] { background: #3fd99a; color: #2d1a2b; border-color: #2d1a2b; }
+.verdict[data-v="bad"] { background: #ff5a4e; color: #fff; }
+.verdict .big { font: 900 clamp(26px, 3vw, 36px)/1.1 var(--cjk); }
+.verdict ul { margin: 0; padding-left: 1.1em; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 860px) { .rules, .checker { grid-template-columns: minmax(0, 1fr); } .rule figure { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- get started ---------- */
+.start-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; margin-top: 40px; align-items: start; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tabs button { border: 2px solid var(--ink); background: var(--sheet); border-radius: 999px; padding: 8px 16px; font-weight: 700; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--ground); }
+@media (max-width: 480px) { .tabs { gap: 6px; } .tabs button { font-size: 14px; padding: 8px 12px; min-height: 44px; } }
+.code { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin-top: 14px; background: var(--scope); color: var(--scope-ink); border: var(--line) solid var(--ink); border-radius: 16px; box-shadow: 6px 6px 0 var(--hard); padding: 18px 20px; font: 14px/1.8 var(--mono); }
+.code[hidden] { display: none; }
+.code pre { margin: 0; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.code .c { color: rgb(245 241 233 / 50%); }
+.code .p { color: #dbe63c; }
+.code .copy { align-self: flex-end; min-width: 60px; min-height: 40px; border: 1px solid rgb(245 241 233 / 35%); background: #1e121d; color: #f5f1e9; border-radius: 999px; padding: 8px 12px; font: 500 12px/1 var(--mono); cursor: pointer; }
+.steps { display: flex; flex-direction: column; gap: 14px; }
+.step { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 16px; padding: 18px; align-items: start; }
+.step .n { width: 48px; height: 48px; border-radius: 14px; border: var(--line) solid var(--ink); display: grid; place-items: center; font: 900 18px/1 var(--display); background: var(--mint); color: #2d1a2b; }
+.step:nth-child(2) .n { background: var(--lid); }
+.step:nth-child(3) .n { background: var(--lilac); }
+.step:nth-child(4) .n { background: var(--coral); color: #fff; }
+.step h3 { font: 700 17px/1.35 var(--cjk); }
+.step p { font-size: 14px; color: var(--ink-2); margin-top: 4px; }
+.step code { font: 500 13px/1.5 var(--mono); }
+.links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+@media (max-width: 860px) { .start-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.footer-wordmark { display: inline-block; width: 100px; height: 33px; vertical-align: middle; }
+footer { border-top: var(--line) solid var(--ink); padding-block: 36px 48px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; justify-content: space-between; font-size: 14px; color: var(--ink-2); }
+
+/* ---------- cursor dot ---------- */
+.cursor { display: none !important; position: fixed; left: 0; top: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--volt); border: 2px solid var(--ink); pointer-events: none; z-index: 100; transform: translate(-50%, -50%); transition: width .25s var(--spring), height .25s var(--spring), background .2s; mix-blend-mode: normal; display: none; }
+.cursor.big { width: 46px; height: 46px; background: color-mix(in srgb, var(--volt) 55%, transparent); }
+@media (hover: hover) and (pointer: fine) { .cursor { display: block; } }
+
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); visibility: hidden; opacity: 0; pointer-events: none; transform: translate(-50%, 12px); background: var(--ink); color: var(--ground); padding: 12px 18px; border-radius: 18px; font: 500 14px/1.5 var(--mono); overflow-wrap: anywhere; z-index: 120; transition: opacity .2s, transform .35s var(--spring); width: max-content; max-width: calc(100% - 32px); }
+.toast.show { visibility: visible; opacity: 1; transform: translate(-50%, 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  html { scroll-behavior: auto; }
+  .cursor { display: none !important; }
+}
+.render-caption { position: absolute; top: calc(100% + 16px); left: 0; right: 0; text-align: center; color: var(--ink-2); font: 500 12px/1.5 var(--cjk); }
+.chat-note { padding: 12px 18px; background: #fffdf8; color: #65545f; font: 400 12px/1.6 var(--cjk); border-top: 1px solid #ded6dc; }
+.polarity-pair { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 20px; vertical-align: middle; }
+.polarity-pos,.polarity-neg { display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 6px; border-radius: 5px; color: #fffdf8; font: 800 13px/1 var(--cjk); white-space: nowrap; }
+.polarity-pos { background: #b92c32; } .polarity-neg { background: #252026; }
+.sticker.s1 { background: #fffdf8; }
+.terminal-howto { margin-top: 30px; padding: 24px; background: #fffdf8; color: #2d1a2b; border: 3px solid #2d1a2b; border-radius: 18px; } .terminal-howto h3 { font: 800 22px/1.4 var(--cjk); } .terminal-howto>p { margin-top: 12px; font-size: 15px; line-height: 1.7; } .terminal-steps { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; margin-top: 18px; } .terminal-steps article { min-width: 0; padding: 14px; border: 1px solid #ded4db; border-radius: 14px; background: #f5f1e9; } .terminal-steps img { width: 100%; height: 150px; object-fit: contain; } .terminal-steps b { display: block; font-size: 17px; margin-top: 8px; } .terminal-steps p { font-size: 14px; line-height: 1.6; margin-top: 7px; } .terminal-more a { font-weight: 700; } @media(max-width:860px){.terminal-steps { grid-template-columns: repeat(2,minmax(0,1fr)); }} @media(max-width:480px){.terminal-howto { padding: 18px; } .terminal-howto h3 { font-size: 20px; } .terminal-steps { grid-template-columns: minmax(0,1fr); } .terminal-steps article { display: grid; grid-template-columns: 100px minmax(0,1fr); gap: 0 12px; } .terminal-steps img { height: 130px; grid-row: 1 / span 2; } .terminal-steps b { align-self: end; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <path id="lz-L" d="M152.0625 54.4911H186.7554C190.0563 54.4911 193.8594 54.4911 197.0547 56.1192C199.1572 57.1905 200.8665 58.8998 201.9377 61.0022C203.5658 64.1976 203.5658 68.0006 203.5658 71.3015V165.2665C203.5658 194.9746 203.5658 229.2021 218.2189 257.9603C227.86 276.8822 243.244 292.2661 262.1658 301.9073C290.9241 316.5603 325.1516 316.5603 354.8596 316.5603H440.6985C443.9994 316.5603 447.8024 316.5603 450.9978 318.1885C453.1002 319.2597 454.8095 320.969 455.8808 323.0715C457.5089 326.2668 457.5089 330.0699 457.5089 333.3708V359.9375C457.5089 379.7428 457.5089 402.5612 447.7402 421.7333C441.3128 434.3479 431.0568 444.6039 418.4422 451.0313C399.2701 460.8 376.4517 460.8 356.6464 460.8H152.0625C132.2572 460.8 109.4388 460.8 90.2667 451.0313C77.6521 444.6039 67.3961 434.3479 60.9687 421.7333C51.2 402.5612 51.2 379.7428 51.2 359.9375V155.3536C51.2 135.5483 51.2 112.7299 60.9687 93.5578C67.3961 80.9432 77.6521 70.6872 90.2667 64.2598C109.4388 54.4911 132.2572 54.4911 152.0625 54.4911Z"/>
+  </defs>
+</svg>
+
+<div class="cursor" id="cursor" aria-hidden="true"></div>
+
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="librezoo · voloo 首页">
+      <picture class="brand-on-light"><img src="assets/brand/librezoo-voloo-compact.svg" alt="librezoo · voloo" width="244" height="50"></picture>
+      <picture class="brand-on-dark"><img src="assets/brand/librezoo-voloo-compact-on-dark.svg" alt="librezoo · voloo" width="244" height="50"></picture>
+    </a>
+    <div class="product-category"><span>Agent-native Hardware</span><b>电源开关</b></div>
+    <button class="theme-toggle" id="themeBtn" aria-label="切换深浅色">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">Agent-native Hardware · 电源开关</span>
+      <h1><span class="title-line">给设备一个</span><span class="title-line">能<span class="hl">编程</span>的</span><span class="title-line">电源开关</span></h1>
+      <p class="lede">直流电源接 IN，设备接 OUT，USB-C 接电脑。开关、主动泄放和断电重启，交给电脑、脚本或 AI Agent；每一步都读回确认。</p>
+      <div class="install hero-install"><code id="heroCmd">npm install -g @librezoo/voloo</code><button type="button" data-copy="npm install -g @librezoo/voloo" aria-label="复制 npm 安装命令">复制</button></div>
+      <div class="hero-cta">
+        <a class="btn" href="https://github.com/librezoo/voloo" target="_blank" rel="noopener">开源链接 ↗</a>
+        <a class="btn primary" href="#bench">模拟试玩 →</a>
+      </div>
+      <p class="hero-note"><b>⚠</b><span>正负极接反会损坏硬件。设备与 USB 操作电脑请分别使用独立电源，不共用同一适配器。上电前请读 <a href="#safety">接线须知</a>。</span></p>
+    </div>
+    <div class="stage" id="stage">
+      <div class="blob"></div>
+      <div class="tilt" id="tilt">
+        <img class="product" src="assets/hero.png" alt="voloo 外壳渲染图：黄紫外壳、绿色端子、橙色按压件，红线接正极、黑线接负极，USB-C 位于前侧" width="1341" height="1173">
+      </div>
+      <div class="sticker s1" aria-label="图示配线：红线接正极，黑线接负极"><span class="polarity-pair"><span class="polarity-pos">红线＋</span><span class="polarity-neg">黑线−</span></span><small>线色辅助，核对标记</small></div>
+      <div class="sticker s2">OFF ≠ 0 V<small>泄放并确认输出 ≤ 1 V</small></div>
+      <p class="render-caption">产品图：AI 辅助效果渲染</p>
+    </div>
+  </div>
+</section>
+
+<div class="ticker-clip"><div class="ticker" aria-hidden="true"><div class="track" id="ticker">
+  <span>voloo on bench-a</span><span>VOUT ≤ 1 V 才算泄放完成</span><span>CLI · MCP · HTTP · Web</span><span>免装专用驱动</span><span>执行结果，读回确认</span><span>voloo cycle bench-a --off-ms 2000</span><span>多台设备，按名字控制</span><span>上位机 Apache-2.0</span>
+</div></div></div>
+
+<!-- ================= BENCH ================= -->
+<section id="bench">
+  <div class="wrap">
+    <div class="bench-head">
+      <div>
+        <span class="eyebrow">在线台架 · 模拟设备</span>
+        <h2 class="h2" style="margin-top:14px">按住开关，或者直接敲命令</h2>
+        <p class="lede" style="margin-top:14px">下面是一台模拟的 voloo，连接 12 V 电源和带输出电容的设备。看看普通 OFF 和主动泄放的区别：OFF 只是断开，电容里的电会慢慢漏；discharge 会把 VOUT 拉到 1 V 以下并确认。</p>
+      </div>
+      <span class="chip">模拟数据，不连接真实硬件</span>
+    </div>
+
+    <div class="bench">
+      <div class="scope-card">
+        <div class="scope-top">
+          <div class="readout"><span class="k">VIN</span><span class="v" id="vinV">12.004<small>V</small></span></div>
+          <div class="readout"><span class="k">VOUT</span><span class="v" id="voutV">0.000<small>V</small></span></div>
+          <span class="state-pill" id="pill" data-s="off">off</span>
+        </div>
+        <canvas id="scope" aria-label="VOUT 模拟变化曲线，最近 10 秒"></canvas>
+        <div class="term">
+          <div class="term-out" id="termOut" aria-live="polite"></div>
+          <form id="termForm" autocomplete="off">
+            <label for="termIn">$</label>
+            <input id="termIn" name="termIn" spellcheck="false" placeholder="voloo on bench-a   （输入 help 查看命令）">
+          </form>
+          <div class="quick" id="quick">
+            <button type="button">voloo ls</button>
+            <button type="button">voloo on bench-a</button>
+            <button type="button">voloo off bench-a</button>
+            <button type="button">voloo discharge bench-a</button>
+            <button type="button">voloo cycle bench-a --off-ms 1500</button>
+            <button type="button">voloo status --json</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="sheet switch-card">
+          <h3>bench-a（模拟）</h3>
+          <button class="knife" id="knife" data-s="off" aria-label="按住 0.6 秒切换模拟输出">
+            <svg viewBox="0 0 260 170" aria-hidden="true">
+              <line class="wire" x1="6" y1="120" x2="50" y2="120"/>
+              <line class="wire" x1="210" y1="120" x2="254" y2="120"/>
+              <circle class="post" cx="62" cy="120" r="16"/>
+              <circle class="post" cx="198" cy="120" r="16"/>
+              <circle class="progress" id="ring" cx="130" cy="58" r="44" transform="rotate(-90 130 58)"/>
+              <g class="blade"><line class="lever" x1="62" y1="120" x2="186" y2="120"/><circle class="tip" cx="198" cy="120" r="20"/></g>
+            </svg>
+          </button>
+          <p class="hint" id="hint">按住 0.6 秒切换模拟输出。短按只会提示。</p>
+          <div class="actions">
+            <button class="btn" type="button" data-run="voloo discharge bench-a">泄放</button>
+            <button class="btn" type="button" data-run="voloo cycle bench-a --off-ms 1500">重启</button>
+          </div>
+        </div>
+        <div class="sheet load-card">
+          <div class="row"><b>设备输出电容</b><span class="mono" id="capLabel">470 µF</span></div>
+          <div class="seg" role="group" aria-label="设备输出电容">
+            <button type="button" data-cap="47" aria-pressed="false">47 µF</button>
+            <button type="button" data-cap="470" aria-pressed="true">470 µF</button>
+            <button type="button" data-cap="2200" aria-pressed="false">2200 µF</button>
+          </div>
+          <p>曲线使用简化模型演示残压变化，不是实测波形或放电时间承诺。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PILLARS ================= -->
+<section id="why" style="padding-top:20px">
+  <div class="wrap">
+    <span class="eyebrow">产品重点</span>
+    <h2 class="h2" style="margin-top:14px">它只做一件事：<br>把供电这一步交给程序</h2>
+    <div class="pillars">
+      <article class="sheet pillar">
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="7" y="3" width="10" height="7" rx="2"/><path d="M12 10v6M8 21h8M12 16v5"/></svg></div>
+        <h3>一根 USB-C，免装专用驱动</h3>
+        <p>使用系统的 USB CDC 驱动，无需安装专用驱动。USB 负责控制，设备由独立直流电源供电；系统串口权限可按使用说明设置。</p>
+      </article>
+      <article class="sheet pillar">
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <h3>每一步都读回确认</h3>
+        <p>开关之后会再检查设备状态，告诉你执行结果。连接中断、结果不确定时会明确提示，让你先查状态再继续。</p>
+      </article>
+      <article class="sheet pillar">
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 5h4l4 14h2l3-9h5"/></svg></div>
+        <h3>OFF 之外还有泄放</h3>
+        <p>关断后仍可能有残压。<code>discharge</code> 主动泄放并确认输出 ≤ 1 V；<code>cycle</code> 再接上等待和重新上电，方便重复冷启动。</p>
+      </article>
+      <article class="sheet pillar">
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9l3 3-3 3M13 15h4"/></svg></div>
+        <h3>四种入口，同一套逻辑</h3>
+        <p>习惯点按钮，就用网页仪表盘；习惯写脚本，就用命令行或本地 HTTP API。AI Agent 可以通过 MCP 接入。</p>
+      </article>
+      <article class="sheet pillar">
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h10M4 17h13"/><circle cx="19" cy="15" r="2"/></svg></div>
+        <h3>多台并排，按名字叫</h3>
+        <p>每台 voloo 各自通过 USB 连接电脑。设置昵称（如 <code>bench-a</code>）后，重新插拔仍可识别，多台按名字查看和控制。</p>
+      </article>
+      <article class="sheet pillar">
+        <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+        <h3>锁定、日志、自检</h3>
+        <p>操作锁会在锁定期间拒绝供电和改名操作，明确解锁后恢复。日志记录操作来源与结果；<code>voloo doctor</code> 提供 USB、权限和读数的排查建议。</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ================= AGENT ================= -->
+<section class="agent" id="agent">
+  <div class="wrap agent-grid">
+    <div>
+      <span class="eyebrow">AI Agent 也能用</span>
+      <h2 class="h2" style="margin-top:14px">让 Agent 控制<br>设备供电</h2>
+      <p class="lede" style="margin-top:16px">确认目标后，Agent 可调用 voloo 关断、主动泄放并重新上电。需要查看设备启动日志时，可结合现有串口工具继续调试。先安装 voloo，再按客户端配置本地 MCP 服务：</p>
+      <div class="mcp-setup" data-tabs>
+        <div class="tabs" role="tablist" aria-label="Agent 接入方式"><button role="tab" type="button" id="tab-agent-claude" aria-selected="true" aria-controls="panel-agent-claude" tabindex="0" data-tab="agent-claude">Claude Code</button><button role="tab" type="button" id="tab-agent-codex" aria-selected="false" aria-controls="panel-agent-codex" tabindex="-1" data-tab="agent-codex">Codex</button><button role="tab" type="button" id="tab-agent-cursor" aria-selected="false" aria-controls="panel-agent-cursor" tabindex="-1" data-tab="agent-cursor">Cursor</button><button role="tab" type="button" id="tab-agent-vscode" aria-selected="false" aria-controls="panel-agent-vscode" tabindex="-1" data-tab="agent-vscode">VS Code</button><button role="tab" type="button" id="tab-agent-generic" aria-selected="false" aria-controls="panel-agent-generic" tabindex="-1" data-tab="agent-generic">其他客户端</button></div>
+        <div class="code" role="tabpanel" id="panel-agent-claude" aria-labelledby="tab-agent-claude" data-panel="agent-claude"><button class="copy" type="button" data-copy="claude mcp add voloo -- voloo mcp" aria-label="复制 Claude Code 接入配置">复制</button><pre>claude mcp add voloo -- voloo mcp</pre><p class="panel-note">安装 voloo 后，在终端执行这条注册命令。</p></div>
+        <div class="code" role="tabpanel" id="panel-agent-codex" aria-labelledby="tab-agent-codex" data-panel="agent-codex" hidden><button class="copy" type="button" data-copy="codex mcp add voloo -- voloo mcp" aria-label="复制 Codex 接入配置">复制</button><pre>codex mcp add voloo -- voloo mcp</pre><p class="panel-note">在终端注册后，Codex 会使用 ~/.codex/config.toml 中的 MCP 配置。</p></div>
+        <div class="code" role="tabpanel" id="panel-agent-cursor" aria-labelledby="tab-agent-cursor" data-panel="agent-cursor" hidden><button class="copy" type="button" data-copy="{&#10;  &quot;mcpServers&quot;: {&#10;    &quot;voloo&quot;: {&#10;      &quot;type&quot;: &quot;stdio&quot;,&#10;      &quot;command&quot;: &quot;voloo&quot;,&#10;      &quot;args&quot;: [&#10;        &quot;mcp&quot;&#10;      ]&#10;    }&#10;  }&#10;}" aria-label="复制 Cursor 接入配置">复制</button><pre>{
+  &quot;mcpServers&quot;: {
+    &quot;voloo&quot;: {
+      &quot;type&quot;: &quot;stdio&quot;,
+      &quot;command&quot;: &quot;voloo&quot;,
+      &quot;args&quot;: [
+        &quot;mcp&quot;
+      ]
+    }
+  }
+}</pre><p class="panel-note">将 voloo 条目合并到 ~/.cursor/mcp.json 的 mcpServers 中，保留已有配置。 <a href="https://cursor.com/docs/mcp" target="_blank" rel="noopener">官方配置说明 ↗</a></p></div>
+        <div class="code" role="tabpanel" id="panel-agent-vscode" aria-labelledby="tab-agent-vscode" data-panel="agent-vscode" hidden><button class="copy" type="button" data-copy="{&#10;  &quot;mcpServers&quot;: {&#10;    &quot;voloo&quot;: {&#10;      &quot;type&quot;: &quot;stdio&quot;,&#10;      &quot;command&quot;: &quot;voloo&quot;,&#10;      &quot;args&quot;: [&#10;        &quot;mcp&quot;&#10;      ],&#10;      &quot;tools&quot;: [&#10;        &quot;*&quot;&#10;      ]&#10;    }&#10;  }&#10;}" aria-label="复制 VS Code 接入配置">复制</button><pre>{
+  &quot;mcpServers&quot;: {
+    &quot;voloo&quot;: {
+      &quot;type&quot;: &quot;stdio&quot;,
+      &quot;command&quot;: &quot;voloo&quot;,
+      &quot;args&quot;: [
+        &quot;mcp&quot;
+      ],
+      &quot;tools&quot;: [
+        &quot;*&quot;
+      ]
+    }
+  }
+}</pre><p class="panel-note">VS Code Copilot：将 voloo 条目合并到项目根目录的 .mcp.json，并保留已有配置；请按所用版本对照官方说明。 <a href="https://code.visualstudio.com/docs/agents/reference/mcp-configuration" target="_blank" rel="noopener">官方配置说明 ↗</a></p></div>
+        <div class="code" role="tabpanel" id="panel-agent-generic" aria-labelledby="tab-agent-generic" data-panel="agent-generic" hidden><button class="copy" type="button" data-copy="{&#10;  &quot;command&quot;: &quot;voloo&quot;,&#10;  &quot;args&quot;: [&#10;    &quot;mcp&quot;&#10;  ]&#10;}" aria-label="复制 其他客户端 接入配置">复制</button><pre>{
+  &quot;command&quot;: &quot;voloo&quot;,
+  &quot;args&quot;: [
+    &quot;mcp&quot;
+  ]
+}</pre><p class="panel-note">其他支持本地 stdio MCP 的客户端：按其配置方式填写命令 voloo、参数 mcp，由客户端启动服务。</p></div>
+      </div>
+      <p class="lede" style="margin-top:16px;font-size:15px">以上是本地 stdio MCP 的配置示例；配置位置和权限设置依客户端版本而异。接入后先读取设备列表和状态，明确目标后再控制供电。</p>
+      <p class="lede" style="margin-top:18px;font-size:15px">Agent 可以查看设备、读取状态、开关电源和查询操作日志。需要只读使用时，在 voloo 的 <span class="mono">~/.voloo/config.toml</span> 的 <span class="mono">[mcp]</span> 下设置 <span class="mono">read_only = true</span>。</p>
+    </div>
+    <div class="sheet chat" id="chat">
+      <div class="chat-top"><i></i><i></i><i></i><span>模拟对话</span><button type="button" id="replay">重播</button></div>
+      <div class="chat-body" id="chatBody">
+        <div class="msg user">固件刚烧好。帮我把 bench-a 冷启动一次。</div>
+        <div class="msg tool"><b>voloo_power</b> {"device":"bench-a","action":"cycle","off_ms":2000}</div>
+        <div class="msg tool">discharge completed: VOUT 0.41 V ≤ 1 V
+waited 2000 ms
+on completed, state: on, VOUT 4.98 V</div>
+        <div class="msg bot">bench-a 已泄放到 0.41 V，等了 2 秒后重新上电，现在 VOUT 是 4.98 V。可以去看串口的启动日志了。</div>
+      </div>
+      <p class="chat-note">预设内容演示，未连接真实 Agent 或设备。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= USE CASES ================= -->
+<section id="uses">
+  <div class="wrap">
+    <span class="eyebrow">放进你的工作流</span>
+    <h2 class="h2" style="margin-top:14px">少拔一次线，<br>多做一次实验</h2>
+    <p class="lede" style="margin-top:18px">把重复的供电操作交给 voloo，让注意力留在正在调试的东西上。</p>
+    <div class="use-cases">
+      <article class="sheet use-case"><span class="n">01</span><h3>固件改完，冷启动</h3><p>泄放、等待、重新上电，一条命令完成。接着查看启动日志，反复验证启动行为。</p><code>voloo cycle bench-a --off-ms 2000</code></article>
+      <article class="sheet use-case"><span class="n">02</span><h3>把断电写进测试</h3><p>把开关电源接进现有脚本。每一步查看执行结果，让启动测试和故障复现可以重复进行。</p><code>voloo status bench-a --json</code></article>
+      <article class="sheet use-case"><span class="n">03</span><h3>多台设备，各有名字</h3><p>给每台 voloo 起个好记的名字，在仪表盘查看状态，控制前确认目标。临时不想被改动，就锁定它。</p><code>voloo ui</code></article>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SPECS ================= -->
+<section id="specs" style="padding-top:40px">
+  <div class="wrap">
+    <span class="eyebrow">开始前了解这些</span>
+    <h2 class="h2" style="margin-top:14px">接得上，也用得顺</h2>
+    <div class="specs">
+      <div class="spec"><span class="k">连接电脑</span><span class="v">USB-C</span><span class="d">免装专用驱动，USB 负责控制</span></div>
+      <div class="spec"><span class="k">标称工作电压</span><span class="v">3.3–28 V DC</span><span class="d">实测工况：3 A 恒流负载</span></div>
+      <div class="spec"><span class="k">泄放完成</span><span class="v">≤ 1 V</span><span class="d">读回输出电压确认，超时会报错</span></div>
+      <div class="spec"><span class="k">支持系统</span><span class="v">macOS · Linux · Win</span><span class="d">同一套命令，也能使用网页仪表盘</span></div>
+    </div>
+    <div class="sheet usage-limits">
+      <h3>标称 3.3–28 V / 最高建议电流 3 A</h3>
+      <div class="limit-line"><strong>最高建议电流 3 A</strong><span>28 V × 3 A ≈ 84 W</span></div>
+      <p><b>超过 3 A 可能损坏硬件。</b>3 A 恒流负载已实测工作正常。功率按 P = U × I 换算；84 W 对应 28 V、3 A 这个工作点，不能据此在低压下使用超过 3 A 的电流。</p>
+      <p>有效 VIN &gt; 30.5 V 时自动关闭输出并锁定过压保护。VIN &lt; 30.0 V 时，<b>过压锁定自动解除，但输出仍保持关闭</b>。用户需在仪表盘长按“开启供电”，或发送新的开启命令，才会恢复供电；不需要额外的过压复位命令。保护阈值不改变标称工作范围。</p>
+      <p>实测恒流负载不等于任意启动浪涌或感性回灌保证。voloo 不自动调压、限流或限功率，请使用外部电源限流；主动泄放用于断电后的残压，不是持续吸收功率的电子负载。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SAFETY ================= -->
+<section class="safety" id="safety">
+  <div class="stripes"></div>
+  <div class="wrap">
+    <span class="eyebrow">接线须知</span>
+    <h2 class="h2" style="margin-top:16px">上电前，先看这两条</h2>
+    <p class="lede" style="margin-top:14px">正负极接反会损坏硬件。负载的供电电源与通过 USB 操作 voloo 的电脑，请分别使用独立电源/适配器，不要共用同一个适配器。</p>
+
+    <div class="rules">
+      <article class="rule">
+        <h3><span class="big">1</span>不要接反电源</h3>
+        <ul>
+          <li><b>正负极接反会损坏硬件。</b>接线前确认电源极性，关闭电源输出后再接线。</li>
+          <li>按实物 IN、OUT 和 + / − 标记接线：IN 接电源，OUT 接设备，不要仅凭图片左右位置判断。</li>
+          <li>图中按红线接＋、黑线接−示意。接线前仍需用万用表确认电源极性，再关闭电源并核对实物标记接线。</li>
+        </ul>
+        <figure>
+          <img src="assets/labels.png" alt="外壳俯视图：左侧输入端子，右侧输出端子，中间标有 + 和 − 以及进出箭头" width="900" height="900" loading="lazy">
+          <figcaption>图示红线接＋、黑线接−，颜色仅作辅助。AI 辅助效果渲染，接线前仍需确认电源极性并核对实物 IN、OUT 和 + / − 标记。</figcaption>
+        </figure>
+      </article>
+      <article class="rule">
+        <h3><span class="big">2</span>不要共用同一适配器</h3>
+        <ul>
+          <li><b>负载供电与 USB 操作电脑必须使用不同的适配器/独立电源。</b>即使同一个适配器有多个输出口，也不要同时用于这两路供电。</li>
+          <li><b>设备只从 voloo 的 OUT 取电。</b>voloo 控制期间，不要再从设备自己的 USB 口、调试器的 VCC / 3V3 或其他电源给它供电。</li>
+          <li>调试器、USB 转串口接到设备时，只连 GND 和信号线。</li>
+        </ul>
+        <p class="why"><b>正确接法：</b>电源 A → voloo IN / OUT → 设备；另一电源 B → USB 操作电脑。设备只从 OUT 取电，不从电脑 USB 或其他接口同时取电。</p>
+      </article>
+    </div>
+
+    <div class="terminal-howto">
+      <h3>端子怎么接：按住橙色件，线进绿色圆孔</h3>
+      <p>橙色件负责夹线，不是电源开关。只在断电后接拔线；如有残压，先执行泄放并确认输出 ≤ 1 V，再断开外部电源和 USB-C。</p>
+      <div class="terminal-steps">
+        <article><img src="assets/guide/terminal-step-0.svg" alt="未处理导线剥线11毫米，线芯整齐"><b>1 · 剥线 11 mm</b><p>线芯齐整，不留散丝；预制端头先确认匹配。</p></article>
+        <article><img src="assets/guide/terminal-step-1.svg" alt="朝电路板方向按住对应的橙色按压件"><b>2 · 按住橙色件</b><p>按住对应按压件，方向朝电路板，使夹口打开。</p></article>
+        <article><img src="assets/guide/terminal-step-2.svg" alt="持续按住橙色件，将导线插入绿色圆孔"><b>3 · 插入绿色圆孔</b><p>持续按住，把线插入相邻圆孔，铜芯完全进入。</p></article>
+        <article><img src="assets/guide/terminal-step-3.svg" alt="松开橙色件后轻拉导线确认夹紧"><b>4 · 松开，轻拉</b><p>确认夹紧，孔外不露铜。橙色开口不是插线孔。</p></article>
+      </div>
+      <p class="terminal-more">取线时先确认断电，按住对应橙色件后再取出，不要硬拽。<a href="quick-start.html">看配图快速说明 →</a> · <a href="assets/guide/voloo-quick-start-zh.pdf" download>下载 A4 两页版</a></p>
+    </div>
+
+    <div class="checker" id="checker">
+      <div>
+        <h3>接线自查</h3>
+        <div class="q"><span>SOURCE 的 + / − 用万用表确认过吗？</span>
+          <div class="opts" data-q="pol"><button type="button" data-v="ok" aria-pressed="false">确认过，没接反</button><button type="button" data-v="bad" aria-pressed="false">没量 / 不确定</button></div></div>
+        <div class="q"><span>负载电源与 USB 操作电脑是否共用同一适配器？</span>
+          <div class="opts" data-q="src"><button type="button" data-v="ok" aria-pressed="false">没有，使用不同电源</button><button type="button" data-v="bad" aria-pressed="false">共用 / 不确定</button></div></div>
+        <div class="q"><span>设备还有别的供电吗？（自带 USB、调试器 VCC、电池……）</span>
+          <div class="opts" data-q="dut"><button type="button" data-v="ok" aria-pressed="false">没有，只从 OUT 取电</button><button type="button" data-v="bad" aria-pressed="false">有</button></div></div>
+      </div>
+      <div class="verdict" id="verdict" data-v="none" aria-live="polite">
+        <span class="big">回答这三个问题</span>
+        <p>确认接线及电气边界后，再打开电源。</p>
+      </div>
+    </div>
+
+  </div>
+  <div class="stripes b"></div>
+</section>
+
+<!-- ================= START ================= -->
+<section id="start">
+  <div class="wrap">
+    <span class="eyebrow">开始使用</span>
+    <h2 class="h2" style="margin-top:14px">准备好，<span class="lat">voloo ls</span></h2>
+    <p class="lede" style="margin-top:18px">先安装 Node.js 18 或更新版本，再执行 npm 安装命令。安装后运行 <code>voloo ls</code> 查看设备，或用 <code>voloo demo</code> 先体验模拟仪表盘。</p>
+    <div class="start-grid">
+      <div data-tabs>
+        <div class="tabs" role="tablist" aria-label="安装方式">
+          <button role="tab" type="button" aria-selected="true" data-tab="npm" id="tab-npm" aria-controls="panel-npm" tabindex="0">npm</button>
+          <button role="tab" type="button" aria-selected="false" data-tab="demo" id="tab-demo" aria-controls="panel-demo" tabindex="-1">先试 demo</button>
+        </div>
+        <div class="code" role="tabpanel" id="panel-npm" aria-labelledby="tab-npm" data-panel="npm"><button class="copy" type="button" data-copy="npm install -g @librezoo/voloo">复制</button><pre><span class="c"># Node 18+ · 安装 voloo</span>
+<span class="p">$</span> npm install -g @librezoo/voloo
+<span class="c"># 或者不安装，直接运行</span>
+<span class="p">$</span> npx @librezoo/voloo ls</pre></div>
+        <div class="code" role="tabpanel" id="panel-demo" aria-labelledby="tab-demo" data-panel="demo" hidden><button class="copy" type="button" data-copy="voloo demo">复制</button><pre><span class="c"># 没有硬件也能看仪表盘，设备是模拟的</span>
+<span class="p">$</span> voloo demo</pre></div>
+        <div class="links">
+          <a class="btn primary" href="https://www.npmjs.com/package/@librezoo/voloo" target="_blank" rel="noopener">npm 安装包 ↗</a>
+          <a class="btn" href="https://github.com/librezoo/voloo" target="_blank" rel="noopener">开源链接 ↗</a>
+          <a class="btn" href="quick-start.html" target="_blank" rel="noopener">快速上手 ↗</a>
+          <a class="btn" href="guide.html" target="_blank" rel="noopener">完整中文说明 ↗</a>
+        </div>
+      </div>
+      <div class="steps">
+        <div class="sheet step"><span class="n">1</span><div><h3>接电源到 IN</h3><p>先量电源极性，再关闭电源接线，+ 对 +。</p></div></div>
+        <div class="sheet step"><span class="n">2</span><div><h3>接设备到 OUT</h3><p>设备只从这里取电，拔掉它的其他供电。</p></div></div>
+        <div class="sheet step"><span class="n">3</span><div><h3>插 USB-C，看一眼</h3><p><code>voloo ls</code> 列出设备；输出关闭且空闲时，可用 <code>voloo name &lt;UID&gt; bench-a</code> 设置昵称。</p></div></div>
+        <div class="sheet step"><span class="n">4</span><div><h3>开始控制</h3><p>确认接线、限流和目标后，使用 <code>voloo on bench-a</code> 或 <code>voloo discharge bench-a</code>；也可运行 <code>voloo ui</code>。</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><svg class="footer-wordmark" xmlns="http://www.w3.org/2000/svg" viewBox="-2 -160 509 165" role="img" aria-label="voloo"><title>voloo</title><g fill="currentColor"><path d="M1.0680 -97.4572 Q0.0000 -100.0000 2.7580 -100.0000 L24.2420 -100.0000 Q27.0000 -100.0000 27.9535 -97.4120 L53.2715 -28.6917 Q55.0000 -24.0000 56.7285 -28.6917 L82.0465 -97.4120 Q83.0000 -100.0000 85.7580 -100.0000 L107.2420 -100.0000 Q110.0000 -100.0000 108.9320 -97.4572 L70.9042 -6.9149 Q68.0000 0.0000 60.5000 0.0000 L49.5000 0.0000 Q42.0000 0.0000 39.0958 -6.9149 Z"/><g transform="translate(-382.1366 0)"><path d="M599.7126 -50C599.7126 -43.55073 598.46958 -37.15695 596.04665 -31.14319C593.62371 -25.12942 590.06255 -19.59916 585.54391 -14.83309C581.02527 -10.06702 575.62692 -6.14716 569.62284 -3.27248C563.61876 -0.39779 557.11229 1.38226 550.43366 1.97732C543.75503 2.57239 537.01918 1.97223 530.56798 0.2073C524.11678 -1.55763 518.06126 -4.45695 512.70877 -8.3435C507.35627 -12.23006 502.79892 -17.03696 499.26801 -22.52024C495.7371 -28.00352 493.2934 -34.06881 492.06095 -40.40828C490.8285 -46.74774 490.8285 -53.25226 492.06095 -59.59172C493.2934 -65.93119 495.7371 -71.99648 499.26801 -77.47976C502.79892 -82.96304 507.35627 -87.76994 512.70877 -91.6565C518.06126 -95.54305 524.11678 -98.44237 530.56798 -100.2073C537.01918 -101.97223 543.75503 -102.57239 550.43366 -101.97732C557.11229 -101.38226 563.61876 -99.60221 569.62284 -96.72752C575.62692 -93.85284 581.02527 -89.93298 585.54391 -85.16691C590.06255 -80.40084 593.62371 -74.87058 596.04665 -68.85681C598.46958 -62.84305 599.7126 -56.44927 599.7126 -50ZM574.7126 -50C574.7126 -53.60764 574.042 -57.18423 572.73484 -60.54826C571.42769 -63.91228 569.50646 -67.00584 567.06869 -69.67191C564.63091 -72.33799 561.71854 -74.53071 558.47938 -76.13877C555.24022 -77.74683 551.73003 -78.74257 548.12695 -79.07544C544.52388 -79.40831 540.88993 -79.07259 537.40955 -78.08531C533.92918 -77.09803 530.66227 -75.47619 527.77463 -73.3021C524.887 -71.12802 522.42834 -68.4391 520.52344 -65.37182C518.61854 -62.30454 517.30018 -58.9117 516.63528 -55.36549C515.97038 -51.81927 515.97038 -48.18073 516.63528 -44.63451C517.30018 -41.0883 518.61854 -37.69546 520.52344 -34.62818C522.42834 -31.5609 524.887 -28.87198 527.77463 -26.6979C530.66227 -24.52381 533.92918 -22.90197 537.40955 -21.91469C540.88993 -20.92741 544.52388 -20.59169 548.12695 -20.92456C551.73003 -21.25743 555.24022 -22.25317 558.47938 -23.86123C561.71854 -25.46929 564.63091 -27.66201 567.06869 -30.32809C569.50646 -32.99416 571.42769 -36.08772 572.73484 -39.45174C574.042 -42.81577 574.7126 -46.39236 574.7126 -50Z"/></g><g transform="translate(224.2500 0)"><path d="M23.2994 0C19.53978 0 11.6189 0 8.35284 -6.41001C6.75 -9.55575 6.75 -13.29976 6.75 -16.5494V-155.24177C6.75 -155.78337 6.75 -156.40737 7.01714 -156.93166C7.10448 -157.10308 7.21826 -157.25968 7.35429 -157.39571C7.49032 -157.53174 7.64692 -157.64552 7.81834 -157.73286C8.34263 -158 8.96663 -158 9.50823 -158H28.99177C29.53337 -158 30.15737 -158 30.68166 -157.73286C30.85308 -157.64552 31.00968 -157.53174 31.14571 -157.39571C31.28174 -157.25968 31.39552 -157.10308 31.48286 -156.93166C31.75 -156.40737 31.75 -155.78337 31.75 -155.24177V-35.65843C31.75 -32.9342 31.75 -27.19469 36.39472 -24.82809C38.67414 -23.66667 41.38706 -23.66667 43.74177 -23.66667H44.24177C44.78337 -23.66667 45.40737 -23.66667 45.93166 -23.39953C46.10308 -23.31219 46.25968 -23.19841 46.39571 -23.06238C46.53174 -22.92634 46.64552 -22.76974 46.73286 -22.59833C47 -22.07404 47 -21.45004 47 -20.90843V-2.75823C47 -2.21663 47 -1.59263 46.73286 -1.06834C46.64552 -0.89692 46.53174 -0.74032 46.39571 -0.60429C46.25968 -0.46826 46.10308 -0.35448 45.93166 -0.26714C45.40737 0 44.78337 0 44.24177 0Z"/></g><g transform="translate(-212.1366 0)"><path d="M599.7126 -50C599.7126 -43.55073 598.46958 -37.15695 596.04665 -31.14319C593.62371 -25.12942 590.06255 -19.59916 585.54391 -14.83309C581.02527 -10.06702 575.62692 -6.14716 569.62284 -3.27248C563.61876 -0.39779 557.11229 1.38226 550.43366 1.97732C543.75503 2.57239 537.01918 1.97223 530.56798 0.2073C524.11678 -1.55763 518.06126 -4.45695 512.70877 -8.3435C507.35627 -12.23006 502.79892 -17.03696 499.26801 -22.52024C495.7371 -28.00352 493.2934 -34.06881 492.06095 -40.40828C490.8285 -46.74774 490.8285 -53.25226 492.06095 -59.59172C493.2934 -65.93119 495.7371 -71.99648 499.26801 -77.47976C502.79892 -82.96304 507.35627 -87.76994 512.70877 -91.6565C518.06126 -95.54305 524.11678 -98.44237 530.56798 -100.2073C537.01918 -101.97223 543.75503 -102.57239 550.43366 -101.97732C557.11229 -101.38226 563.61876 -99.60221 569.62284 -96.72752C575.62692 -93.85284 581.02527 -89.93298 585.54391 -85.16691C590.06255 -80.40084 593.62371 -74.87058 596.04665 -68.85681C598.46958 -62.84305 599.7126 -56.44927 599.7126 -50ZM574.7126 -50C574.7126 -53.60764 574.042 -57.18423 572.73484 -60.54826C571.42769 -63.91228 569.50646 -67.00584 567.06869 -69.67191C564.63091 -72.33799 561.71854 -74.53071 558.47938 -76.13877C555.24022 -77.74683 551.73003 -78.74257 548.12695 -79.07544C544.52388 -79.40831 540.88993 -79.07259 537.40955 -78.08531C533.92918 -77.09803 530.66227 -75.47619 527.77463 -73.3021C524.887 -71.12802 522.42834 -68.4391 520.52344 -65.37182C518.61854 -62.30454 517.30018 -58.9117 516.63528 -55.36549C515.97038 -51.81927 515.97038 -48.18073 516.63528 -44.63451C517.30018 -41.0883 518.61854 -37.69546 520.52344 -34.62818C522.42834 -31.5609 524.887 -28.87198 527.77463 -26.6979C530.66227 -24.52381 533.92918 -22.90197 537.40955 -21.91469C540.88993 -20.92741 544.52388 -20.59169 548.12695 -20.92456C551.73003 -21.25743 555.24022 -22.25317 558.47938 -23.86123C561.71854 -25.46929 564.63091 -27.66201 567.06869 -30.32809C569.50646 -32.99416 571.42769 -36.08772 572.73484 -39.45174C574.042 -42.81577 574.7126 -46.39236 574.7126 -50Z"/></g><g transform="translate(-95.5606 0)"><path d="M599.7126 -50C599.7126 -43.55073 598.46958 -37.15695 596.04665 -31.14319C593.62371 -25.12942 590.06255 -19.59916 585.54391 -14.83309C581.02527 -10.06702 575.62692 -6.14716 569.62284 -3.27248C563.61876 -0.39779 557.11229 1.38226 550.43366 1.97732C543.75503 2.57239 537.01918 1.97223 530.56798 0.2073C524.11678 -1.55763 518.06126 -4.45695 512.70877 -8.3435C507.35627 -12.23006 502.79892 -17.03696 499.26801 -22.52024C495.7371 -28.00352 493.2934 -34.06881 492.06095 -40.40828C490.8285 -46.74774 490.8285 -53.25226 492.06095 -59.59172C493.2934 -65.93119 495.7371 -71.99648 499.26801 -77.47976C502.79892 -82.96304 507.35627 -87.76994 512.70877 -91.6565C518.06126 -95.54305 524.11678 -98.44237 530.56798 -100.2073C537.01918 -101.97223 543.75503 -102.57239 550.43366 -101.97732C557.11229 -101.38226 563.61876 -99.60221 569.62284 -96.72752C575.62692 -93.85284 581.02527 -89.93298 585.54391 -85.16691C590.06255 -80.40084 593.62371 -74.87058 596.04665 -68.85681C598.46958 -62.84305 599.7126 -56.44927 599.7126 -50ZM574.7126 -50C574.7126 -53.60764 574.042 -57.18423 572.73484 -60.54826C571.42769 -63.91228 569.50646 -67.00584 567.06869 -69.67191C564.63091 -72.33799 561.71854 -74.53071 558.47938 -76.13877C555.24022 -77.74683 551.73003 -78.74257 548.12695 -79.07544C544.52388 -79.40831 540.88993 -79.07259 537.40955 -78.08531C533.92918 -77.09803 530.66227 -75.47619 527.77463 -73.3021C524.887 -71.12802 522.42834 -68.4391 520.52344 -65.37182C518.61854 -62.30454 517.30018 -58.9117 516.63528 -55.36549C515.97038 -51.81927 515.97038 -48.18073 516.63528 -44.63451C517.30018 -41.0883 518.61854 -37.69546 520.52344 -34.62818C522.42834 -31.5609 524.887 -28.87198 527.77463 -26.6979C530.66227 -24.52381 533.92918 -22.90197 537.40955 -21.91469C540.88993 -20.92741 544.52388 -20.59169 548.12695 -20.92456C551.73003 -21.25743 555.24022 -22.25317 558.47938 -23.86123C561.71854 -25.46929 564.63091 -27.66201 567.06869 -30.32809C569.50646 -32.99416 571.42769 -36.08772 572.73484 -39.45174C574.042 -42.81577 574.7126 -46.39236 574.7126 -50Z"/></g></g></svg> · LibreZoo · 上位机 Apache-2.0</span>
+    <span>voloo 只切换你提供的电源，本身不是电源。OFF 不等于 0 V。</span>
+  </div>
+</footer>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- theme ---------- */
+  const root = document.documentElement;
+  try { const t = localStorage.getItem('voloo-theme'); if (t) root.dataset.theme = t; } catch (e) {}
+  $('#themeBtn').addEventListener('click', () => {
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('voloo-theme', root.dataset.theme); } catch (e) {}
+  });
+
+  /* ---------- toast + copy ---------- */
+  const toast = $('#toast'); let tt;
+  const say = (m) => { toast.textContent = m; toast.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => toast.classList.remove('show'), 1800); };
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-copy]'); if (!b) return;
+    const text = b.dataset.copy;
+    const done = () => say('已复制：' + text);
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => say(text)); else say(text);
+  });
+
+  /* ---------- cursor dot ---------- */
+  const cur = $('#cursor');
+  if (!reduce && matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    let x = innerWidth / 2, y = innerHeight / 2, cx = x, cy = y;
+    addEventListener('pointermove', (e) => { x = e.clientX; y = e.clientY; });
+    document.addEventListener('pointerover', (e) => cur.classList.toggle('big', !!e.target.closest('a,button,input,.knife')));
+    (function loop() { cx += (x - cx) * .2; cy += (y - cy) * .2; cur.style.transform = `translate(${cx - 9}px, ${cy - 9}px)`; requestAnimationFrame(loop); })();
+    cur.style.left = '0'; cur.style.top = '0';
+  }
+
+  /* ---------- hero tilt ---------- */
+  const stage = $('#stage'), tilt = $('#tilt');
+  if (!reduce) {
+    stage.addEventListener('pointermove', (e) => {
+      const r = stage.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width - .5, py = (e.clientY - r.top) / r.height - .5;
+      tilt.style.transform = `rotateY(${px * 18}deg) rotateX(${-py * 14}deg)`;
+    });
+    stage.addEventListener('pointerleave', () => { tilt.style.transform = ''; });
+  }
+
+  /* ---------- ticker: duplicate for seamless loop ---------- */
+  const tr = $('#ticker'); tr.innerHTML += tr.innerHTML;
+
+  /* ---------- simulated device ---------- */
+  const UID = '5E-11-D0-00-00-00-00-01', NICK = 'bench-a', PORT = 'USB-CDC-DEMO';
+  const dev = { state: 'off', busy: false, locked: false, vin: 12.004, vout: 0, cap: 470, last: 'ok', dischStart: 0 };
+  const hist = []; const WINDOW = 10; // seconds
+  let t0 = performance.now(), lastT = t0;
+
+  function step(now) {
+    const dt = Math.min(60, Math.max(0, (now - lastT) / 1000)); lastT = now; if (dt === 0) return;
+    const vin = dev.vin + (Math.random() - .5) * .004;
+    if (dev.state === 'on') dev.vout += (vin * .996 - dev.vout) * (1 - Math.exp(-dt / .012));
+    else if (dev.state === 'discharging') dev.vout *= Math.exp(-dt / .09);
+    else { const tau = dev.cap * 0.0105; dev.vout *= Math.exp(-dt / tau); }
+    if (dev.vout < .0005) dev.vout = 0;
+    hist.push([(now - t0) / 1000, dev.vout]);
+    while (hist.length && hist[0][0] < (now - t0) / 1000 - WINDOW - .2) hist.shift();
+  }
+
+  const setState = (s) => { step(performance.now()); dev.state = s; };
+  const fmt = (v) => v.toFixed(3);
+  const vinEl = $('#voutV'), pill = $('#pill'), knife = $('#knife');
+  let lastUi = 0;
+  function ui(now) {
+    if (now - lastUi > 90) {
+      lastUi = now;
+      $('#vinV').innerHTML = fmt(dev.vin + (Math.random() - .5) * .004) + '<small>V</small>';
+      vinEl.innerHTML = fmt(dev.vout) + '<small>V</small>';
+    }
+    const s = dev.locked ? 'locked' : dev.busy ? 'busy' : dev.state;
+    if (pill.dataset.s !== s) { pill.dataset.s = s; pill.textContent = s === 'discharging' ? 'discharging' : s; }
+    const ks = dev.busy ? 'busy' : dev.state;
+    if (knife.dataset.s !== ks) knife.dataset.s = ks === 'busy' ? (dev.state === 'off' ? 'off' : 'busy') : ks;
+  }
+
+  /* scope drawing */
+  const cv = $('#scope'), ctx = cv.getContext('2d');
+  function size() { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = r.width * d; cv.height = r.height * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  size(); addEventListener('resize', size);
+  function draw(now) {
+    const w = cv.clientWidth, h = cv.clientHeight, padL = 44, padR = 14, padT = 12, padB = 26;
+    const pw = w - padL - padR, ph = h - padT - padB, vmax = 14;
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = '11px "DM Mono", ui-monospace, monospace'; ctx.textBaseline = 'middle';
+    for (let v = 0; v <= 12; v += 4) {
+      const y = padT + ph - v / vmax * ph;
+      ctx.strokeStyle = 'rgba(245,241,233,.09)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      ctx.fillStyle = 'rgba(245,241,233,.5)'; ctx.textAlign = 'right'; ctx.fillText(v + ' V', padL - 8, y);
+    }
+    for (let s = 0; s <= WINDOW; s += 2) {
+      const x = padL + pw - s / WINDOW * pw;
+      ctx.strokeStyle = 'rgba(245,241,233,.06)'; ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + ph); ctx.stroke();
+      ctx.fillStyle = 'rgba(245,241,233,.45)'; ctx.textAlign = 'center'; ctx.fillText(s === 0 ? '现在' : '−' + s + ' s', x, h - 10);
+    }
+    // 1 V threshold
+    const y1 = padT + ph - 1 / vmax * ph;
+    ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(255,148,66,.85)'; ctx.beginPath(); ctx.moveTo(padL, y1); ctx.lineTo(w - padR, y1); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,148,66,.95)'; ctx.textAlign = 'left'; ctx.fillText('1 V 泄放线', padL + 6, y1 - 9);
+    const tn = (now - t0) / 1000;
+    if (hist.length > 1) {
+      const pts = hist.map(([t, v]) => [padL + pw - (tn - t) / WINDOW * pw, padT + ph - Math.min(v, vmax) / vmax * ph]).filter(p => p[0] >= padL - 2);
+      const col = dev.state === 'on' ? '#dbe63c' : dev.state === 'discharging' ? '#ff9442' : '#b49cf0';
+      const g = ctx.createLinearGradient(0, padT, 0, padT + ph); g.addColorStop(0, col + '55'); g.addColorStop(1, col + '00');
+      ctx.beginPath(); ctx.moveTo(pts[0][0], padT + ph); pts.forEach(p => ctx.lineTo(p[0], p[1])); ctx.lineTo(pts[pts.length - 1][0], padT + ph); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.stroke();
+      const e = pts[pts.length - 1]; ctx.beginPath(); ctx.arc(e[0], e[1], 5, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = '#1e121d'; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+  (function frame(now) { step(now); ui(now); draw(now); requestAnimationFrame(frame); })(performance.now());
+
+  /* ---------- operations ---------- */
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const desc = () => (step(performance.now()), `${dev.state.padEnd(12)} VIN ${(fmt(dev.vin) + ' V').padEnd(10)} VOUT ${(fmt(dev.vout) + ' V').padEnd(10)} last: ${dev.last}`);
+  let running = false;
+
+  async function power(cmd, offMs = 1000) {
+    if (dev.locked) return { code: 5, lines: [[`error: ${NICK} is locked; run \`voloo unlock ${NICK}\` first`, 'err']] };
+    if (running) return { code: 5, lines: [['error: device busy', 'err']] };
+    running = true; dev.busy = true; const st = performance.now(); const lines = [];
+    try {
+      if (cmd === 'on') {
+        if (dev.state === 'on') { dev.busy = false; return { code: 0, lines: [[`${UID}  already on\n  ${desc()}`, 'ok']] }; }
+        setState('off'); await wait(10); setState('on'); await wait(70);
+      } else if (cmd === 'off') {
+        if (dev.state === 'off') { dev.busy = false; return { code: 0, lines: [[`${UID}  already off\n  ${desc()}`, 'ok'], ['  note: OFF does not discharge the load; use `voloo discharge` to confirm VOUT <= 1 V', 'warn']] }; }
+        setState('off'); await wait(28);
+      } else if (cmd === 'discharge' || cmd === 'cycle') {
+        setState('off'); await wait(10); setState('discharging');
+        let ok = 0; const s0 = performance.now();
+        while (ok < 3 && performance.now() - s0 < 5000) { await wait(10); step(performance.now()); ok = dev.vout <= 1 ? ok + 1 : 0; }
+        setState('off');
+        if (ok < 3) { dev.last = 'timeout'; return { code: 2, lines: [['discharge timed out: VOUT still above 1 V', 'err']] }; }
+        if (cmd === 'cycle') {
+          lines.push([`  discharge done in ${Math.round(performance.now() - st)} ms, VOUT ${fmt(dev.vout)} V`, 'dim']);
+          dev.busy = false; await wait(offMs); dev.busy = true;
+          lines.push([`  waited ${offMs} ms`, 'dim']);
+          setState('on'); await wait(70);
+        }
+      }
+      dev.last = 'ok';
+      const ms = Math.round(performance.now() - st);
+      lines.unshift([`${UID}  ${cmd} completed in ${ms} ms`, 'ok']);
+      lines.push(['  ' + desc(), '']);
+      if (cmd === 'off') lines.push(['  note: OFF does not discharge the load; use `voloo discharge` to confirm VOUT <= 1 V', 'warn']);
+      return { code: 0, lines };
+    } finally { dev.busy = false; running = false; }
+  }
+
+  /* ---------- terminal ---------- */
+  const out = $('#termOut');
+  const print = (text, cls = '') => { const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = text; out.appendChild(d); out.scrollTop = out.scrollHeight; };
+  print('# 交互模拟，输出为示例，不连接真实设备。输入 help 查看命令。', 'dim');
+  const HELP = `voloo ls | status [--json] | on DEV | off DEV | discharge DEV
+voloo cycle DEV [--off-ms N] | lock DEV | unlock DEV | clear
+DEV = bench-a 或 ${UID}`;
+
+  async function run(line) {
+    line = line.trim(); if (!line) return;
+    print('$ ' + line, 'cmd');
+    const a = line.split(/\s+/); if (a[0] !== 'voloo') { if (a[0] === 'help') { print(HELP, 'dim'); return; } if (a[0] === 'clear') { out.innerHTML = ''; return; } print(`zsh: command not found: ${a[0]}  （试试 voloo ls）`, 'err'); return; }
+    const sub = a[1], json = a.includes('--json');
+    const devArg = a.slice(2).find(x => !x.startsWith('--') && !/^\d+$/.test(x));
+    const known = (d) => !d || d === NICK || d === UID;
+    const exit = (c) => print(`exit ${c}`, c === 0 ? 'dim' : c === 3 ? 'warn' : 'err');
+    switch (sub) {
+      case undefined: case 'help': case '--help': print(HELP, 'dim'); return;
+      case 'ls': case 'status':
+        if (!known(devArg)) { print(`error: no voloo matches "${devArg}"`, 'err'); exit(4); return; }
+        if (json) print(JSON.stringify({ uid: UID, nickname: NICK, port: PORT, online: true, status: { power_state: dev.state, busy: dev.busy, vin_mv: Math.round(dev.vin * 1000), vout_mv: Math.round(dev.vout * 1000), last_result: dev.last }, locked: dev.locked, faults: [] }, null, 2));
+        else print(`${UID} (${NICK})  ${PORT}\n  ${desc()}`);
+        exit(0); return;
+      case 'on': case 'off': case 'discharge': case 'cycle': {
+        if (!devArg) { print(`error: \`voloo ${sub}\` needs a device (write commands always name it)`, 'err'); exit(4); return; }
+        if (!known(devArg)) { print(`error: no voloo matches "${devArg}"`, 'err'); exit(4); return; }
+        const i = a.indexOf('--off-ms'); const offMs = i > 0 ? Math.min(8000, Math.max(100, +a[i + 1] || 1000)) : 1000;
+        const r = await power(sub, offMs); r.lines.forEach(([t, c]) => print(t, c)); exit(r.code); return;
+      }
+      case 'lock': case 'unlock':
+        if (!devArg || !known(devArg)) { print('error: name the device, e.g. voloo lock bench-a', 'err'); exit(4); return; }
+        dev.locked = sub === 'lock'; print(`${UID} ${sub}ed`, 'ok'); exit(0); return;
+      default: print(`error: unknown command "${sub}"  （输入 help）`, 'err'); exit(4);
+    }
+  }
+  let queue = Promise.resolve();
+  const enqueue = (l) => (queue = queue.then(() => run(l)));
+  $('#termForm').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#termIn').value; $('#termIn').value = ''; enqueue(v); });
+  $('#quick').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) enqueue(b.textContent); });
+  $$('[data-run]').forEach(b => b.addEventListener('click', () => enqueue(b.dataset.run)));
+
+  /* ---------- hold-to-switch knife ---------- */
+  const ring = $('#ring'), hint = $('#hint'), C = 2 * Math.PI * 44; let holdStart = 0, holdRaf = 0;
+  const HOLD = 600;
+  function holdTick() {
+    const p = Math.min(1, (performance.now() - holdStart) / HOLD);
+    ring.style.strokeDasharray = `${p * C} ${C}`;
+    if (p >= 1) { holdStart = 0; knife.classList.remove('holding'); ring.style.strokeDasharray = `0 ${C}`; enqueue(dev.state === 'on' ? 'voloo off bench-a' : 'voloo on bench-a'); hint.textContent = '模拟操作完成，结果见终端。'; return; }
+    holdRaf = requestAnimationFrame(holdTick);
+  }
+  knife.addEventListener('pointerdown', (e) => { e.preventDefault(); knife.setPointerCapture?.(e.pointerId); holdStart = performance.now(); knife.classList.add('holding'); holdTick(); });
+  const cancel = () => { knife.classList.remove('holding'); if (!holdStart) return; const short = performance.now() - holdStart < HOLD; holdStart = 0; cancelAnimationFrame(holdRaf); ring.style.strokeDasharray = `0 ${C}`; if (short) hint.textContent = '要按住 0.6 秒，防止误触。'; };
+  knife.addEventListener('pointerup', cancel); knife.addEventListener('pointercancel', cancel); knife.addEventListener('pointerleave', cancel);
+  knife.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enqueue(dev.state === 'on' ? 'voloo off bench-a' : 'voloo on bench-a'); } });
+
+  $$('.seg button').forEach(b => b.addEventListener('click', () => {
+    $$('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    dev.cap = +b.dataset.cap; $('#capLabel').textContent = b.dataset.cap + ' µF';
+  }));
+
+  // Opening demo: power on so the scope has a trace when the section comes into view.
+  setTimeout(() => enqueue('voloo on bench-a'), 600);
+
+  /* ---------- chat replay ---------- */
+  const msgs = $$('#chatBody .msg');
+  async function replay() {
+    const button = $('#replay');
+    if (reduce || button.disabled) return;
+    button.disabled = true;
+    try {
+      msgs.forEach(m => m.classList.add('hidden'));
+      for (const m of msgs) { await wait(m.classList.contains('tool') ? 650 : 900); m.classList.remove('hidden'); }
+    } finally { button.disabled = false; }
+  }
+  $('#replay').addEventListener('click', replay);
+
+  /* ---------- wiring checker ---------- */
+  const ans = {};
+  const TIPS = { pol: '正负极接反会损坏硬件。先在未连接 voloo 时量清 SOURCE 的 + / −，关闭电源后再接线。', src: '不要用同一适配器同时给设备和 USB 操作电脑供电，不同输出口也不行。请分别使用独立电源。', dut: '拔掉设备的其他供电，只让它从 OUT 取电。调试器只连 GND 和信号线。' };
+  $$('.opts').forEach(g => g.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('button', g).forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    ans[g.dataset.q] = b.dataset.v;
+    const v = $('#verdict'); const keys = Object.keys(TIPS); const bad = keys.filter(k => ans[k] === 'bad');
+    if (bad.length) { v.dataset.v = 'bad'; v.innerHTML = '<span class="big">先别通电</span><ul>' + bad.map(k => '<li>' + TIPS[k] + '</li>').join('') + '</ul>'; }
+    else if (keys.every(k => ans[k] === 'ok')) { v.dataset.v = 'ok'; v.innerHTML = '<span class="big">三项自查已填写</span><p>这里只根据回答提示，不检测实物接线。还需确认标称电压范围、最高建议电流 3 A，以及功率和温升条件。插上 USB-C，运行 <span class="mono">voloo ls</span>。</p>'; }
+    else { v.dataset.v = 'none'; v.innerHTML = '<span class="big">还差 ' + keys.filter(k => !ans[k]).length + ' 项</span><p>确认接线及电气边界后，再打开电源。</p>'; }
+  }));
+
+  /* ---------- install tabs ---------- */
+  $$('[data-tabs]').forEach(group => {
+    const tabs = $$('[role="tab"]', group);
+    const activate = tab => {
+      tabs.forEach(t => {
+        t.setAttribute('aria-selected', String(t === tab));
+        t.tabIndex = t === tab ? 0 : -1;
+      });
+      $$('[data-panel]', group).forEach(p => { p.hidden = p.dataset.panel !== tab.dataset.tab; });
+    };
+    tabs.forEach((tab, i) => {
+      tab.addEventListener('click', () => activate(tab));
+      tab.addEventListener('keydown', e => {
+        const next = e.key === 'ArrowRight' ? (i + 1) % tabs.length
+          : e.key === 'ArrowLeft' ? (i + tabs.length - 1) % tabs.length
+          : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
+        if (next < 0) return;
+        e.preventDefault(); activate(tabs[next]); tabs[next].focus();
+      });
+    });
+  });
+})();
+</script>

@@ -10,6 +10,12 @@ voloo only switches the externally supplied SOURCE power; it is not a power sour
 **OFF does not mean the load terminals are at zero volts** — use `discharge` to
 confirm VOUT ≤ 1 V.
 
+## Product website and quick starts
+
+[中文官网](https://voloo.librezoo.com/) · [English website](https://voloo.librezoo.com/index.en.html) · [中文快速上手](docs/quick-start.md) · [English quick start](docs/quick-start.en.md) · [Posters and downloads](https://voloo.librezoo.com/downloads.html)
+
+Public website and editable promotional sources live in [website/](website/README.md). Individual downloads include Chinese / English posters, long images and two-page A4 guides.
+
 ## Install
 
 ```sh
