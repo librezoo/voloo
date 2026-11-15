@@ -8,12 +8,12 @@
 安装本版主机：
 
 ```sh
-npm install -g @librezoo/voloo@0.7.0
+npm install -g @librezoo/voloo@0.7.1
 voloo ls
 ```
 
 如果旧版后台还在运行，先等所有设备操作完成，再执行一次 `voloo daemon stop`，
-随后用新版 `voloo ls` 启动后台，并核对 `voloo daemon status` 显示 0.7.0。
+随后用新版 `voloo ls` 启动后台，并核对 `voloo daemon status` 显示 0.7.1。
 这是更换主机程序的步骤；普通固件升级期间不要停止后台。
 
 ## 升级
