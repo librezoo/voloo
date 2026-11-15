@@ -258,6 +258,7 @@ fn router(app: App) -> Router {
         .route("/v1/trace", get(trace))
         .route("/v1/events", get(events))
         .route("/v1/shutdown", post(shutdown))
+        .route("/v1/shutdown/idle", post(shutdown_idle))
         .route("/mcp", post(mcp_post).get(mcp_other).delete(mcp_other))
         .route("/openapi.json", get(openapi))
         .route("/v1/devices/{id}/lock", post(device_lock))
@@ -583,6 +584,17 @@ async fn shutdown(State(app): State<App>) -> Json<Value> {
     Json(json!({"stopping": true, "note": "Device outputs are left unchanged."}))
 }
 
+async fn shutdown_idle(State(app): State<App>) -> ApiResult {
+    app.manager.begin_idle_shutdown()?;
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let _ = app.stopping.send(true);
+    });
+    Ok(Json(
+        json!({"stopping":true,"idle_verified":true,"note":"Device outputs are left unchanged."}),
+    ))
+}
+
 /// Keeps the fast polling rate while at least one event stream is open.
 struct Watched<S> {
     inner: S,
@@ -682,6 +694,7 @@ pub fn openapi_spec() -> Value {
                 "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["locked"], "properties": {"locked": {"type": "boolean"}}}}}},
                 "responses": ok("Lock state")}},
             "/v1/shutdown": {"post": {"summary": "Stop the background process (outputs unchanged)", "responses": ok("Stopping")}},
+            "/v1/shutdown/idle": {"post": {"summary": "Stop only when no device operation is queued or running; otherwise return 409", "responses": ok("Idle shutdown accepted")}},
             "/mcp": {"post": {"summary": "Model Context Protocol (JSON-RPC, Streamable HTTP with JSON responses)", "responses": ok("JSON-RPC response")}}
         },
         "components": {

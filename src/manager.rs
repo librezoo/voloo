@@ -73,6 +73,20 @@ struct Request {
     job: Job,
     source: &'static str,
     reply: oneshot::Sender<Result<Value, OpError>>,
+    _activity: Activity,
+}
+
+#[derive(Default)]
+struct Admission {
+    draining: bool,
+    jobs: usize,
+}
+
+struct Activity(Arc<Mutex<Admission>>);
+impl Drop for Activity {
+    fn drop(&mut self) {
+        self.0.lock().unwrap().jobs -= 1;
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -132,6 +146,7 @@ pub struct Manager {
     threads: Mutex<Vec<JoinHandle<()>>>,
     /// Locks set at runtime (web page or API), persisted in `$VOLOO_HOME/locks.json`.
     runtime_locks: Mutex<std::collections::BTreeSet<Uid>>,
+    admission: Arc<Mutex<Admission>>,
 }
 
 impl Manager {
@@ -146,6 +161,7 @@ impl Manager {
             stop: AtomicBool::new(false),
             threads: Mutex::new(Vec::new()),
             runtime_locks: Mutex::new(load_locks()),
+            admission: Arc::new(Mutex::new(Admission::default())),
         });
         let tx = manager.events.clone();
         recorder.set_listener(Box::new(move |kind, fault| {
@@ -189,6 +205,7 @@ impl Manager {
 
     /// Stops scanning and all workers. Device outputs are left as they are.
     pub fn shutdown(&self) {
+        self.admission.lock().unwrap().draining = true;
         self.stop.store(true, Ordering::SeqCst);
         for e in self.entries.lock().unwrap().values_mut() {
             e.stop.store(true, Ordering::SeqCst);
@@ -400,6 +417,48 @@ impl Manager {
             .any(|e| e.updating.load(Ordering::SeqCst))
     }
 
+    fn reserve(&self) -> Result<Activity, OpError> {
+        let mut admission = self.admission.lock().unwrap();
+        if admission.draining {
+            return Err(OpError::new(
+                ErrorKind::Busy,
+                "Background process is shutting down; no device operation was queued",
+            ));
+        }
+        admission.jobs += 1;
+        Ok(Activity(self.admission.clone()))
+    }
+
+    /// Reject queued/running work and atomically close admission before acknowledging.
+    /// Activity lives in the request, so client disconnect/timeout cannot hide a job.
+    pub fn begin_idle_shutdown(&self) -> Result<(), OpError> {
+        let mut admission = self.admission.lock().unwrap();
+        if admission.jobs != 0 || admission.draining {
+            return Err(OpError::new(
+                ErrorKind::Busy,
+                "Device operations are queued or running; background process was not stopped",
+            ));
+        }
+        let entries = self.entries.lock().unwrap();
+        if entries.values().any(|entry| {
+            entry.updating.load(Ordering::SeqCst)
+                || entry
+                    .snapshot
+                    .lock()
+                    .unwrap()
+                    .status
+                    .as_ref()
+                    .is_some_and(|status| status.busy || status.discharge_enabled)
+        }) {
+            return Err(OpError::new(
+                ErrorKind::Busy,
+                "A device is busy; background process was not stopped",
+            ));
+        }
+        admission.draining = true;
+        Ok(())
+    }
+
     pub fn devices(&self) -> Vec<Snapshot> {
         let entries = self.entries.lock().unwrap();
         entries
@@ -504,6 +563,7 @@ impl Manager {
                 "Name the device (UID or nickname) for any action that changes it",
             ));
         }
+        let activity = self.reserve()?;
         let uid = self.resolve(id)?;
         let maintenance = job.maintenance();
         let (reply, rx) = oneshot::channel();
@@ -527,7 +587,13 @@ impl Manager {
                     "Firmware maintenance is in progress for this device; no other device operation was queued",
                 ));
             }
-            tx.send(Request { job, source, reply }).map_err(|_| {
+            tx.send(Request {
+                job,
+                source,
+                reply,
+                _activity: activity,
+            })
+            .map_err(|_| {
                 if maintenance {
                     updating.store(false, Ordering::SeqCst);
                 }
@@ -877,5 +943,106 @@ fn save_locks(locks: &std::collections::BTreeSet<Uid>) {
     let tmp = path.with_extension("json.tmp");
     if std::fs::write(&tmp, serde_json::to_vec_pretty(&list).unwrap()).is_ok() {
         let _ = std::fs::rename(tmp, path);
+    }
+}
+
+#[cfg(test)]
+mod idle_admission_tests {
+    use super::*;
+    use crate::{
+        config::Config,
+        observe::{Level, Limits},
+    };
+    use std::sync::{Barrier, Mutex};
+
+    fn manager() -> (tempfile::TempDir, Arc<Manager>) {
+        let dir = tempfile::tempdir().unwrap();
+        let recorder = Arc::new(
+            Recorder::with_dir(Level::Info, dir.path().to_path_buf(), Limits::default()).unwrap(),
+        );
+        (dir, Manager::new(recorder, Config::default()))
+    }
+
+    #[test]
+    fn queued_and_running_activity_blocks_idle_shutdown_and_draining_rejects_new_work() {
+        let (_dir, manager) = manager();
+        let running = manager.reserve().unwrap();
+        assert!(manager.begin_idle_shutdown().is_err());
+        drop(running);
+
+        let activity = manager.reserve().unwrap();
+        let (tx, rx) = mpsc::channel();
+        let (reply, caller) = oneshot::channel();
+        drop(caller); // Simulate the HTTP caller disconnecting after queue admission.
+        tx.send(Request {
+            job: Job::Cycle {
+                off_ms: 1,
+                discharge: false,
+            },
+            source: "http",
+            reply,
+            _activity: activity,
+        })
+        .unwrap();
+        assert!(manager.begin_idle_shutdown().is_err());
+        drop(tx);
+        drop(rx); // Dropping the queued request releases its reservation.
+
+        manager.begin_idle_shutdown().unwrap();
+        assert!(manager.reserve().is_err());
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        assert!(
+            runtime
+                .block_on(manager.call(None, Job::Status, "http"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn concurrent_reservation_and_idle_shutdown_cannot_both_succeed() {
+        let (_dir, manager) = manager();
+        let barrier = Arc::new(Barrier::new(3));
+        let held = Arc::new(Mutex::new(None));
+        let (reserve_tx, reserve_rx) = std::sync::mpsc::channel();
+        let reserve_manager = manager.clone();
+        let reserve_barrier = barrier.clone();
+        let reserve_held = held.clone();
+        let reserver = std::thread::spawn(move || {
+            reserve_barrier.wait();
+            match reserve_manager.reserve() {
+                Ok(activity) => {
+                    *reserve_held.lock().unwrap() = Some(activity);
+                    reserve_tx.send(true).unwrap();
+                }
+                Err(_) => reserve_tx.send(false).unwrap(),
+            }
+        });
+
+        let (idle_tx, idle_rx) = std::sync::mpsc::channel();
+        let idle_manager = manager.clone();
+        let idle_barrier = barrier.clone();
+        let shutdown = std::thread::spawn(move || {
+            idle_barrier.wait();
+            idle_tx
+                .send(idle_manager.begin_idle_shutdown().is_ok())
+                .unwrap();
+        });
+
+        barrier.wait();
+        let reservation_succeeded = reserve_rx.recv().unwrap();
+        let idle_succeeded = idle_rx.recv().unwrap();
+        reserver.join().unwrap();
+        shutdown.join().unwrap();
+        assert_ne!(reservation_succeeded, idle_succeeded);
+        if reservation_succeeded {
+            assert!(held.lock().unwrap().is_some());
+            let activity = held.lock().unwrap().take();
+            drop(activity);
+            manager.begin_idle_shutdown().unwrap();
+        } else {
+            assert!(manager.reserve().is_err());
+        }
     }
 }

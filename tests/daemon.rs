@@ -1474,3 +1474,82 @@ fn firmware_failed_trial_rolls_back_and_failed_upload_releases_maintenance() {
     assert_eq!(state.firmware.as_ref().unwrap().upload_slot, None);
     assert!(state.writes.is_empty());
 }
+
+#[test]
+fn idle_shutdown_waits_for_cycle_activity_and_requires_authentication() {
+    let rig = Rig::new("idle_poll_ms = 60000\n", 600);
+    rig.ready();
+    let info = rig.info().unwrap();
+    let unauthenticated = raw_request(
+        info.port,
+        &format!(
+            "POST /v1/shutdown/idle HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            info.port
+        ),
+    );
+    assert_eq!(unauthenticated.0, 401, "{unauthenticated:?}");
+
+    let (status, _) = rig.http(
+        "POST",
+        &format!("/v1/devices/{UID_A}/power"),
+        Some(json!({"action":"on"})),
+    );
+    assert_eq!(status, 200);
+
+    let cycle_client = Client {
+        info,
+        source: "http",
+    };
+    let cycle_path = format!("/v1/devices/{UID_A}/cycle");
+    let cycle_body = json!({"off_ms": 1500, "discharge": false});
+    let cycle = std::thread::spawn(move || {
+        cycle_client
+            .send(
+                "POST",
+                &cycle_path,
+                Some(&cycle_body),
+                Duration::from_secs(30),
+            )
+            .unwrap()
+    });
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while rig.sims[0].state.lock().unwrap().writes.len() < 2 {
+        assert!(Instant::now() < deadline, "cycle never reached OFF wait");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(rig.sims[0].state.lock().unwrap().writes, vec![1, 0]);
+
+    // The cached status stays idle while the device waits between OFF and ON.
+    let (status, devices) = rig.http("GET", "/v1/devices", None);
+    assert_eq!(status, 200);
+    let target = devices
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["uid"] == UID_A)
+        .unwrap();
+    assert!(!target["status"]["busy"].as_bool().unwrap(), "{target}");
+    let (status, response) = rig.http("POST", "/v1/shutdown/idle", None);
+    assert_eq!(status, 409, "{response}");
+    assert_eq!(rig.sims[0].state.lock().unwrap().writes, vec![1, 0]);
+
+    let (cycle_status, cycle_response) = cycle.join().unwrap();
+    assert_eq!(cycle_status, 200, "{cycle_response}");
+    assert_eq!(rig.sims[0].state.lock().unwrap().writes, vec![1, 0, 1]);
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let (status, response) = rig.http("POST", "/v1/shutdown/idle", None);
+        if status == 200 {
+            assert!(response["idle_verified"].as_bool().unwrap(), "{response}");
+            break;
+        }
+        assert_eq!(status, 409, "{response}");
+        assert!(
+            Instant::now() < deadline,
+            "activity did not release: {response}"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
