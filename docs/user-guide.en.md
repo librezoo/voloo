@@ -2,10 +2,10 @@
 
 [中文图文说明](user-guide.md) · [Illustrated quick start](quick-start.en.md) · [Website](https://voloo.librezoo.com/index.en.html)
 
-voloo switches the power of a connected device (the load) on and off, from your
-computer, over one USB cable. The USB cable carries control only: the load's power
-comes from your own supply through voloo's SOURCE terminals. voloo switches it; it is
-not a power source.
+voloo lets you control a device's DC power from your computer over USB. Connect
+your external supply to IN / SOURCE and your device to OUT / DUT, then connect
+voloo to your computer with a USB data cable. USB provides control; the external
+supply powers your device. voloo is a switch, not a power supply.
 
 Three things to keep in mind:
 
@@ -22,7 +22,13 @@ The nominal input range is **3.3–28 V DC**. Operation with a **3 A constant-cu
 
 Load power is `P = V × I`: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.
 
-The firmware inhibits ON and turns off existing output when **valid measured VIN > 30.5 V**. At **valid VIN < 30.0 V, the overvoltage latch clears automatically**, but output **stays OFF**. No overvoltage reset command is needed. After returning to the nominal input range and checking the wiring and current, the user must explicitly press and hold **Switch On**, send a new `voloo on DEV` command, or ask the agent to switch that device on. Earlier ON state and rejected commands are never automatically resumed. The overvoltage latch is separate from the user operation lock set by `voloo lock`; `voloo unlock` does not reset overvoltage protection. Invalid or stale VIN also inhibits/cancels ON. Overvoltage shutdown does not automatically discharge. These are software measurement thresholds, not validated physical clamp voltages or response-time guarantees, and they do not raise the 28 V nominal upper limit.
+When a valid VIN reading exceeds **30.5 V**, voloo switches the output OFF and latches overvoltage protection. Once a valid reading falls below **30.0 V**, **the latch clears automatically, but the output stays OFF**.
+
+To restore power, first return to the 3.3–28 V operating range and check the wiring and current limit. Then press and hold **Switch On** in the dashboard, send a new `voloo on DEV` command, or ask your agent to switch that device on. **No separate overvoltage reset command is needed.** voloo never automatically restores the previous ON state or retries a rejected command.
+
+Overvoltage protection is separate from the operation lock set with `voloo lock`: `voloo unlock` does not clear an overvoltage condition. Invalid or stale VIN readings also prevent the output from turning on and switch an active output off. An overvoltage shutdown does not discharge the output automatically.
+
+These thresholds use software voltage measurements. They are not guaranteed physical clamp voltages or response times, and they do not extend the 28 V nominal upper limit.
 
 ## Before connecting power
 
@@ -32,26 +38,26 @@ The firmware inhibits ON and turns off existing output when **valid measured VIN
 
 ## Spring-terminal wiring and removal
 
-The orange actuator opens the wire clamp; it is **not the power switch**. Control power using the dashboard, CLI or agent. The terminal stays attached to voloo; do not remove it or look for a screw.
+The orange tabs release the wire clamps; **they do not switch power**. Use the dashboard, CLI or agent to control power. Leave the terminals attached to voloo. There are no screws to loosen.
 
-**Make both ends unpowered before handling wires.** If residual voltage remains, keep USB connected and discharge until VOUT ≤ 1 V is confirmed. Then turn off and disconnect the external supply, unplug USB-C, and verify the input and device ends are unpowered.
+**Do not handle the wires while either side is powered.** If residual voltage remains, keep USB connected and discharge until VOUT ≤ 1 V is confirmed. Then turn off and disconnect the external supply, unplug USB-C, and confirm that neither the input nor the device side has power.
 
-1. **Strip 11 mm** from untreated wire, per the [KEFA KF142V-5.08 drawing (LCSC C475134)](https://www.lcsc.com/datasheet/C475134.pdf). Keep strands together; check prepared ends fit.
-2. **Press and hold** the matching orange actuator **toward the circuit board** to open the clamp.
-3. **Keep pressing and insert** the conductor fully into the adjacent **green round hole**. Orange openings and narrow green slots are not wire entries.
-4. **Release, then gently tug** to check the grip. No bare copper should remain outside the hole.
+1. **Strip 11 mm** of insulation from the wire, if needed, as specified in the [KEFA KF142V-5.08 drawing (LCSC C475134)](https://www.lcsc.com/datasheet/C475134.pdf). Keep the strands together. Check that any pre-fitted wire end fits the terminal.
+2. **Press and hold** the matching orange tab **toward the circuit board** to open the clamp.
+3. **Keep pressing and insert** the conductor fully into the adjacent **round wire opening in the green terminal**. Orange openings and narrow green slots are not wire entries.
+4. **Release, then gently tug** to check the grip. Check that no bare copper is exposed outside the terminal.
 
-![Hold the matching orange actuator toward the circuit board](assets/terminal-step-1.svg)
+![Hold the matching orange tab toward the circuit board](assets/terminal-step-1.svg)
 
 ![Keep pressing and insert into the adjacent green round hole](assets/terminal-step-2.svg)
 
 ![Release and gently tug to check the clamp](assets/terminal-step-3.svg)
 
-To remove a wire, make both ends unpowered, hold the matching orange actuator and withdraw along the entry direction. Do not yank the wire or pry the actuator. These diagrams illustrate the mechanism, not fixed polarity positions. Follow physical IN / OUT and + / − markings: the illustrated leads use red for positive and black for negative. Component ratings do not change the system limits of **3.3–28 V DC and 3 A maximum recommended current**.
+To remove a wire, disconnect all power first. Hold the matching orange tab and gently pull the wire straight out. Do not force the wire or pry the tab. The diagrams show how the clamp works; they do not specify which terminal is positive or negative. Follow physical IN / OUT and + / − markings: the illustrated leads use red for positive and black for negative. Component ratings do not change the system limits of **3.3–28 V DC and 3 A maximum recommended current**.
 
 ## 1. Install
 
-You need any USB cable that carries data (USB-A or USB-C to USB-C, USB 2.0 or 3.0).
+Use a USB data cable (USB-A or USB-C to USB-C, USB 2.0 or 3.0).
 The device uses system USB CDC drivers; no vendor-specific driver is required. Serial access may still need permission setup.
 
 | With | Command |
@@ -77,8 +83,8 @@ voloo name 5E-11-D0-00-00-00-00-01 bench-a   # nickname (output must be off)
 voloo ui                         # dashboard in your browser
 ```
 
-Each command reads the device back and reports what it confirmed. Add `--json` for
-programs. Exit codes: `0` done (or already so), `2` the device reported a failure,
+After each command, voloo checks the device state and reports the result. Add `--json` for
+programs. Exit codes: `0` completed (or already in the requested state), `2` the device reported a failure,
 `3` outcome unknown or not connected — check `voloo status` first, `4` bad argument or
 device not found, `5` busy, locked or port in use.
 
@@ -121,8 +127,8 @@ voloo provides a local stdio MCP server, started with `voloo mcp`. The entries b
 Without a global install, clients that support executable arguments can use `command: "npx"` with `args: ["-y", "@librezoo/voloo", "mcp"]`. Configuration paths and executable lookup depend on the client and operating system.
 
 The agent gets five tools: `voloo_list_devices`, `voloo_get_status`, `voloo_power`
-(`on`, `off`, `discharge`, `cycle`), `voloo_set_nickname` and `voloo_get_log`. To let
-agents look but not switch, add to `~/.voloo/config.toml`:
+(`on`, `off`, `discharge`, `cycle`), `voloo_set_nickname` and `voloo_get_log`. To give
+agents read-only access, add this to `~/.voloo/config.toml`:
 
 ```toml
 [mcp]
@@ -231,7 +237,7 @@ uid = "5E-11-D0-00-00-00-00-01"
 
 `VOLOO_HOME` moves everything (settings, logs, reports) to another directory.
 
-## 7. When something is wrong
+## 7. Troubleshooting
 
 | Symptom | What to do |
 | --- | --- |
@@ -243,7 +249,7 @@ uid = "5E-11-D0-00-00-00-00-01"
 | Result unknown | `voloo status` first. Do not repeat the command blindly. |
 
 `voloo faults` lists problems with the suggested next step. `voloo log` shows the
-history of every switch with who did it (terminal, web, AI agent or API).
+history of power operations, including where each command came from (CLI, dashboard, AI agent or API).
 
 **Reporting a problem:** `voloo report` writes one file under `~/.voloo/reports/` with
 versions, device states and registers, recent faults and logs, and your settings. It

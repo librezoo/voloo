@@ -10,16 +10,16 @@ table{border-collapse:collapse;width:100%;font-size:15px;line-height:1.75;margin
 img{display:block;max-width:100%;height:auto;margin:24px auto 0;border-radius:14px;border:1px solid #c7bcc5}.figure-link{display:block}.figure-link:focus-visible{outline:3px solid #3fb2ff;outline-offset:4px}p:has(>em:only-child){font-size:14px;line-height:1.75;color:#65545f;margin-top:12px}em{font-style:normal}
 @media(max-width:600px){body{margin-top:18px;padding:0 18px 50px;font-size:16px}h1{font-size:30px}h2{font-size:24px;margin-top:38px}th,td{padding:7px;font-size:14px}table{display:block;overflow-x:auto}pre{padding:16px}img{border-radius:10px}}
 @media print{body{max-width:none;padding:0;font-size:11pt;background:white}.page-nav{display:none}h2,h3{break-after:avoid}pre,blockquote,img{break-inside:avoid}img{max-height:230mm;object-fit:contain}a{color:inherit}}
-</style><style id="locale-style">
-.locale-link{display:inline-flex;align-items:center;justify-content:center;flex:none;padding:7px 10px;border:1px solid currentColor;border-radius:999px;font:600 13px/1.2 system-ui,sans-serif;text-decoration:none;white-space:nowrap}
+</style><link href="assets/fonts/fonts.css" rel="stylesheet"/>
+<style id="locale-style">
+.locale-link{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:44px;min-height:44px;padding:7px 10px;border:1px solid currentColor;border-radius:999px;font:600 13px/1.2 system-ui,sans-serif;text-decoration:none;white-space:nowrap}
 @media(max-width:640px){.bar .wrap{gap:10px}.bar .brand img{width:min(48vw,244px);height:auto}.bar .product-category{display:none}.bar .theme-toggle{flex:none}.bar .locale-link{margin-left:auto}.bar .brand{margin-right:auto}}
-</style><link href="guide.html" hreflang="zh-CN" rel="alternate"/><link href="guide.en.html" hreflang="en" rel="alternate"/><link href="https://voloo.librezoo.com/guide.en.html" rel="canonical"/><link href="assets/fonts/fonts.css" rel="stylesheet"/>
-</head><body><nav class="page-nav"><a href="index.en.html">← voloo</a><a class="locale-link" href="guide.html" hreflang="zh-CN" lang="zh-CN">中文</a><a href="downloads.en.html" id="downloads-link">Downloads</a></nav><main><h1 id="voloo-user-guide">voloo user guide</h1>
+</style><link href="guide.html" hreflang="zh-CN" rel="alternate"/><link href="guide.en.html" hreflang="en" rel="alternate"/><link href="https://voloo.librezoo.com/guide.en.html" rel="canonical"/></head><body><nav class="page-nav"><a href="index.en.html">← voloo</a><a class="locale-link" href="guide.html" hreflang="zh-CN" lang="zh-CN">中文</a><a href="downloads.en.html" id="downloads-link">Downloads</a></nav><main><h1 id="voloo-user-guide">voloo user guide</h1>
 <p><a href="guide.html">中文图文说明</a> · <a href="quick-start.en.html">Illustrated quick start</a> · <a href="https://voloo.librezoo.com/index.en.html">Website</a></p>
-<p>voloo switches the power of a connected device (the load) on and off, from your
-computer, over one USB cable. The USB cable carries control only: the load's power
-comes from your own supply through voloo's SOURCE terminals. voloo switches it; it is
-not a power source.</p>
+<p>voloo lets you control a device's DC power from your computer over USB. Connect
+your external supply to IN / SOURCE and your device to OUT / DUT, then connect
+voloo to your computer with a USB data cable. USB provides control; the external
+supply powers your device. voloo is a switch, not a power supply.</p>
 <p>Three things to keep in mind:</p>
 <ul>
 <li><strong>Off is not 0 V.</strong> Turning the output off disconnects the supply, but the load can
@@ -32,7 +32,10 @@ repeats a power command on its own after a lost reply.</li>
 <h2 id="tested-operating-range-and-overvoltage-protection">Tested operating range and overvoltage protection</h2>
 <p>The nominal input range is <strong>3.3–28 V DC</strong>. Operation with a <strong>3 A constant-current load</strong> in this range has been tested. The <strong>maximum recommended load current is 3 A; exceeding 3 A can damage the hardware.</strong> This condition does not establish support for arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.</p>
 <p>Load power is <code>P = V × I</code>: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.</p>
-<p>The firmware inhibits ON and turns off existing output when <strong>valid measured VIN &gt; 30.5 V</strong>. At <strong>valid VIN &lt; 30.0 V, the overvoltage latch clears automatically</strong>, but output <strong>stays OFF</strong>. No overvoltage reset command is needed. After returning to the nominal input range and checking the wiring and current, the user must explicitly press and hold <strong>Switch On</strong>, send a new <code>voloo on DEV</code> command, or ask the agent to switch that device on. Earlier ON state and rejected commands are never automatically resumed. The overvoltage latch is separate from the user operation lock set by <code>voloo lock</code>; <code>voloo unlock</code> does not reset overvoltage protection. Invalid or stale VIN also inhibits/cancels ON. Overvoltage shutdown does not automatically discharge. These are software measurement thresholds, not validated physical clamp voltages or response-time guarantees, and they do not raise the 28 V nominal upper limit.</p>
+<p>When a valid VIN reading exceeds <strong>30.5 V</strong>, voloo switches the output OFF and latches overvoltage protection. Once a valid reading falls below <strong>30.0 V</strong>, <strong>the latch clears automatically, but the output stays OFF</strong>.</p>
+<p>To restore power, first return to the 3.3–28 V operating range and check the wiring and current limit. Then press and hold <strong>Switch On</strong> in the dashboard, send a new <code>voloo on DEV</code> command, or ask your agent to switch that device on. <strong>No separate overvoltage reset command is needed.</strong> voloo never automatically restores the previous ON state or retries a rejected command.</p>
+<p>Overvoltage protection is separate from the operation lock set with <code>voloo lock</code>: <code>voloo unlock</code> does not clear an overvoltage condition. Invalid or stale VIN readings also prevent the output from turning on and switch an active output off. An overvoltage shutdown does not discharge the output automatically.</p>
+<p>These thresholds use software voltage measurements. They are not guaranteed physical clamp voltages or response times, and they do not extend the 28 V nominal upper limit.</p>
 <h2 id="before-connecting-power">Before connecting power</h2>
 <ul>
 <li><strong>Reversed supply polarity damages the hardware.</strong> Verify + / − before wiring and turn the supply output off before connecting it.</li>
@@ -40,20 +43,20 @@ repeats a power command on its own after a lost reply.</li>
 <li><strong>3 A is the maximum recommended current. Higher current can damage the hardware.</strong> This applies at every operating voltage: for example, 12 V × 4 A = 48 W still exceeds the current limit even though it is below 84 W. Set an appropriate external current limit no higher than 3 A; voloo does not actively limit current.</li>
 </ul>
 <h2 id="spring-terminal-wiring-and-removal">Spring-terminal wiring and removal</h2>
-<p>The orange actuator opens the wire clamp; it is <strong>not the power switch</strong>. Control power using the dashboard, CLI or agent. The terminal stays attached to voloo; do not remove it or look for a screw.</p>
-<p><strong>Make both ends unpowered before handling wires.</strong> If residual voltage remains, keep USB connected and discharge until VOUT ≤ 1 V is confirmed. Then turn off and disconnect the external supply, unplug USB-C, and verify the input and device ends are unpowered.</p>
+<p>The orange tabs release the wire clamps; <strong>they do not switch power</strong>. Use the dashboard, CLI or agent to control power. Leave the terminals attached to voloo. There are no screws to loosen.</p>
+<p><strong>Do not handle the wires while either side is powered.</strong> If residual voltage remains, keep USB connected and discharge until VOUT ≤ 1 V is confirmed. Then turn off and disconnect the external supply, unplug USB-C, and confirm that neither the input nor the device side has power.</p>
 <ol>
-<li><strong>Strip 11 mm</strong> from untreated wire, per the <a href="https://www.lcsc.com/datasheet/C475134.pdf">KEFA KF142V-5.08 drawing (LCSC C475134)</a>. Keep strands together; check prepared ends fit.</li>
-<li><strong>Press and hold</strong> the matching orange actuator <strong>toward the circuit board</strong> to open the clamp.</li>
-<li><strong>Keep pressing and insert</strong> the conductor fully into the adjacent <strong>green round hole</strong>. Orange openings and narrow green slots are not wire entries.</li>
-<li><strong>Release, then gently tug</strong> to check the grip. No bare copper should remain outside the hole.</li>
+<li><strong>Strip 11 mm</strong> of insulation from the wire, if needed, as specified in the <a href="https://www.lcsc.com/datasheet/C475134.pdf">KEFA KF142V-5.08 drawing (LCSC C475134)</a>. Keep the strands together. Check that any pre-fitted wire end fits the terminal.</li>
+<li><strong>Press and hold</strong> the matching orange tab <strong>toward the circuit board</strong> to open the clamp.</li>
+<li><strong>Keep pressing and insert</strong> the conductor fully into the adjacent <strong>round wire opening in the green terminal</strong>. Orange openings and narrow green slots are not wire entries.</li>
+<li><strong>Release, then gently tug</strong> to check the grip. Check that no bare copper is exposed outside the terminal.</li>
 </ol>
-<p><img alt="Hold the matching orange actuator toward the circuit board" src="assets/guide/terminal-step-1.svg"/></p>
+<p><img alt="Hold the matching orange tab toward the circuit board" src="assets/guide/terminal-step-1.svg"/></p>
 <p><img alt="Keep pressing and insert into the adjacent green round hole" src="assets/guide/terminal-step-2.svg"/></p>
 <p><img alt="Release and gently tug to check the clamp" src="assets/guide/terminal-step-3.svg"/></p>
-<p>To remove a wire, make both ends unpowered, hold the matching orange actuator and withdraw along the entry direction. Do not yank the wire or pry the actuator. These diagrams illustrate the mechanism, not fixed polarity positions. Follow physical IN / OUT and + / − markings: the illustrated leads use red for positive and black for negative. Component ratings do not change the system limits of <strong>3.3–28 V DC and 3 A maximum recommended current</strong>.</p>
+<p>To remove a wire, disconnect all power first. Hold the matching orange tab and gently pull the wire straight out. Do not force the wire or pry the tab. The diagrams show how the clamp works; they do not specify which terminal is positive or negative. Follow physical IN / OUT and + / − markings: the illustrated leads use red for positive and black for negative. Component ratings do not change the system limits of <strong>3.3–28 V DC and 3 A maximum recommended current</strong>.</p>
 <h2 id="1-install">1. Install</h2>
-<p>You need any USB cable that carries data (USB-A or USB-C to USB-C, USB 2.0 or 3.0).
+<p>Use a USB data cable (USB-A or USB-C to USB-C, USB 2.0 or 3.0).
 The device uses system USB CDC drivers; no vendor-specific driver is required. Serial access may still need permission setup.</p>
 <table>
 <thead>
@@ -86,8 +89,8 @@ voloo cycle bench-a --off-ms 2000   # discharge, wait 2 s, on
 voloo name 5E-11-D0-00-00-00-00-01 bench-a   # nickname (output must be off)
 voloo ui                         # dashboard in your browser
 </code></pre>
-<p>Each command reads the device back and reports what it confirmed. Add <code>--json</code> for
-programs. Exit codes: <code>0</code> done (or already so), <code>2</code> the device reported a failure,
+<p>After each command, voloo checks the device state and reports the result. Add <code>--json</code> for
+programs. Exit codes: <code>0</code> completed (or already in the requested state), <code>2</code> the device reported a failure,
 <code>3</code> outcome unknown or not connected — check <code>voloo status</code> first, <code>4</code> bad argument or
 device not found, <code>5</code> busy, locked or port in use.</p>
 <p>A small background process owns the USB ports so that the terminal, the dashboard, AI
@@ -149,8 +152,8 @@ light or dark appearance in the header. Preferences are saved in this browser.</
 </table>
 <p>Without a global install, clients that support executable arguments can use <code>command: "npx"</code> with <code>args: ["-y", "@librezoo/voloo", "mcp"]</code>. Configuration paths and executable lookup depend on the client and operating system.</p>
 <p>The agent gets five tools: <code>voloo_list_devices</code>, <code>voloo_get_status</code>, <code>voloo_power</code>
-(<code>on</code>, <code>off</code>, <code>discharge</code>, <code>cycle</code>), <code>voloo_set_nickname</code> and <code>voloo_get_log</code>. To let
-agents look but not switch, add to <code>~/.voloo/config.toml</code>:</p>
+(<code>on</code>, <code>off</code>, <code>discharge</code>, <code>cycle</code>), <code>voloo_set_nickname</code> and <code>voloo_get_log</code>. To give
+agents read-only access, add this to <code>~/.voloo/config.toml</code>:</p>
 <pre><code class="language-toml">[mcp]
 read_only = true
 </code></pre>
@@ -231,7 +234,7 @@ path = "/dev/ttyUSB3"
 uid = "5E-11-D0-00-00-00-00-01"
 </code></pre>
 <p><code>VOLOO_HOME</code> moves everything (settings, logs, reports) to another directory.</p>
-<h2 id="7-when-something-is-wrong">7. When something is wrong</h2>
+<h2 id="7-troubleshooting">7. Troubleshooting</h2>
 <table>
 <thead>
 <tr>
@@ -267,7 +270,7 @@ uid = "5E-11-D0-00-00-00-00-01"
 </tbody>
 </table>
 <p><code>voloo faults</code> lists problems with the suggested next step. <code>voloo log</code> shows the
-history of every switch with who did it (terminal, web, AI agent or API).</p>
+history of power operations, including where each command came from (CLI, dashboard, AI agent or API).</p>
 <p><strong>Reporting a problem:</strong> <code>voloo report</code> writes one file under <code>~/.voloo/reports/</code> with
 versions, device states and registers, recent faults and logs, and your settings. It
 contains no token, host name or user name, and nothing is sent anywhere; open it to
