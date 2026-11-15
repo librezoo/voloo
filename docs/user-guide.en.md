@@ -1,8 +1,8 @@
 # voloo user guide
 
-[中文图文说明](user-guide.md)
+[中文图文说明](user-guide.md) · [Illustrated quick start](quick-start.en.md) · [Website](https://voloo.librezoo.com/index.en.html)
 
-voloo switches the power of a device under test (the load) on and off, from your
+voloo switches the power of a connected device (the load) on and off, from your
 computer, over one USB cable. The USB cable carries control only: the load's power
 comes from your own supply through voloo's SOURCE terminals. voloo switches it; it is
 not a power source.
@@ -29,6 +29,25 @@ The firmware inhibits ON and turns off existing output when **valid measured VIN
 - **Reversed supply polarity damages the hardware.** Verify + / − before wiring and turn the supply output off before connecting it.
 - **Do not power both the load supply and the USB host computer from the same adapter.** Use independent supply A for voloo IN / the load and another independent supply B for the operating computer. Different output ports on one multiport adapter do not count as independent supplies. Do not take load power from the host computer's USB port.
 - **3 A is the maximum recommended current. Higher current can damage the hardware.** This applies at every operating voltage: for example, 12 V × 4 A = 48 W still exceeds the current limit even though it is below 84 W. Set an appropriate external current limit no higher than 3 A; voloo does not actively limit current.
+
+## Spring-terminal wiring and removal
+
+The orange actuator opens the wire clamp; it is **not the power switch**. Control power using the dashboard, CLI or agent. The terminal stays attached to voloo; do not remove it or look for a screw.
+
+**Make both ends unpowered before handling wires.** If residual voltage remains, keep USB connected and discharge until VOUT ≤ 1 V is confirmed. Then turn off and disconnect the external supply, unplug USB-C, and verify the input and device ends are unpowered.
+
+1. **Strip 11 mm** from untreated wire, per the [KEFA KF142V-5.08 drawing (LCSC C475134)](https://www.lcsc.com/datasheet/C475134.pdf). Keep strands together; check prepared ends fit.
+2. **Press and hold** the matching orange actuator **toward the circuit board** to open the clamp.
+3. **Keep pressing and insert** the conductor fully into the adjacent **green round hole**. Orange openings and narrow green slots are not wire entries.
+4. **Release, then gently tug** to check the grip. No bare copper should remain outside the hole.
+
+![Hold the matching orange actuator toward the circuit board](assets/terminal-step-1.svg)
+
+![Keep pressing and insert into the adjacent green round hole](assets/terminal-step-2.svg)
+
+![Release and gently tug to check the clamp](assets/terminal-step-3.svg)
+
+To remove a wire, make both ends unpowered, hold the matching orange actuator and withdraw along the entry direction. Do not yank the wire or pry the actuator. These diagrams illustrate the mechanism, not fixed polarity positions. Follow physical IN / OUT and + / − markings: the illustrated leads use red for positive and black for negative. Component ratings do not change the system limits of **3.3–28 V DC and 3 A maximum recommended current**.
 
 ## 1. Install
 
