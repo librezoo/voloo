@@ -982,7 +982,7 @@ fn web_login_cookie_and_page() {
             .unwrap()
             .contains("script-src 'self'")
     );
-    assert!(page.contains("<title>Voloo</title>"));
+    assert!(page.contains("<title>voloo</title>"));
     let (status, locale) = raw_request(
         port,
         &format!("GET /ui/i18n.js HTTP/1.1\r\n{host}Connection: close\r\n\r\n"),
