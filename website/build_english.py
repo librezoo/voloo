@@ -23,7 +23,7 @@ JS={
 }
 BASE_CSS='''
 .locale-link{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:44px;min-height:44px;padding:7px 10px;border:1px solid currentColor;border-radius:999px;font:600 13px/1.2 system-ui,sans-serif;text-decoration:none;white-space:nowrap}
-@media(max-width:640px){.bar .wrap{gap:10px}.bar .brand img{width:min(48vw,244px);height:auto}.bar .product-category{display:none}.bar .theme-toggle{flex:none}.bar .locale-link{margin-left:auto}.bar .brand{margin-right:auto}}
+@media(max-width:640px){.bar .wrap{gap:10px}.bar .brand{width:min(48vw,244px);height:44px}.bar .product-category{display:none}.bar .theme-toggle{flex:none}.bar .locale-link{margin-left:auto}.bar .brand{margin-right:auto}}
 '''
 EN_CSS='''
 html[lang=en] body{font-family:Arial,Helvetica,system-ui,sans-serif}
@@ -77,6 +77,8 @@ def language_ui(soup,filename,english=False):
 
 def translate(source,target,kind='site'):
     soup=BeautifulSoup(source.read_text(),'html.parser');missing=set()
+    if kind=='site':
+        for component in soup.select('.brand,.site-footer'):component.clear()
     for node in list(soup.find_all(string=True)):
         if isinstance(node,Comment):continue
         raw=str(node);key=raw.strip()

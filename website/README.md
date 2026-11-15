@@ -10,6 +10,7 @@ The public product website is [voloo.librezoo.com](https://voloo.librezoo.com/).
 - `artwork/build_quick_start.py`, `artwork/build_quick_start_en.py`: illustrated quick-start HTML, terminal SVGs and two-page A4 PDFs. The PDF generator uses the manufacturer-specified **11 mm** strip length, [KEFA KF142V-5.08 / LCSC C475134](https://www.lcsc.com/datasheet/C475134.pdf).
 - `poster/`: editable Chinese and English poster / long-image pages and shared website QR source. `render_media.mjs` exports individual PNG / JPG files.
 - `site/assets/`: approved public product renderings, brand marks, illustrations and downloadable documents / media. Product renderings are AI-assisted, based on the actual yellow / purple enclosure, green terminals, orange actuators and red positive / black negative leads. The original reference photograph is private and is not stored here.
+- `build_site_chrome.py` and `site/assets/site-chrome.css`: shared brand navigation, localized footer, and the same favicon / touch icon as librezoo.com. LibreZoo links to the parent website; the header voloo wordmark returns to the top of the current page.
 - `build_downloads.py`: Chinese / English downloads pages. Every poster and PDF QR code points to **https://voloo.librezoo.com/**.
 
 These are static product pages and simulated interactions, not a public remote-control endpoint for physical hardware. No daemon, local token, private firmware, provisioning material, factory backup or maintenance log is deployed.
