@@ -45,7 +45,7 @@ voloo demo
 
 ![voloo 接口识别：IN 接独立电源，OUT 接设备，USB-C 接电脑](assets/port-map.png)
 
-*图 1：产品外观渲染及接口标注。接线以实物和外壳的正负极标记为准。*
+*图 1：产品图为 AI 辅助效果渲染，接口标注用于识别。接线以实物和外壳的正负极标记为准。*
 
 | 接口 | 连接什么 |
 | --- | --- |
@@ -63,7 +63,7 @@ voloo demo
 | 负载功率 | 按 `P = U × I` 换算；28 V × 3 A ≈ **84 W**，是按该电压与电流换算的负载功率，不是脱离工况的统一功率额定 |
 | 供电与限流 | voloo 只做电源开关，不自动调压、限流或限功率；由外部电源设置合适的电流限制 |
 
-本节依据项目提供者于 **2026-11-14** 反馈的实测结果更新。已确认的是 **3 A 恒流负载工况**；不要将它扩展成任意容性启动浪涌、感性回灌、全温或任意长时间运行条件的保证。不同线材、接线、外壳及环境条件仍需确认压降和温升。
+已测试工况为 **3.3–28 V、3 A 恒流负载**。不同线材、接线、外壳及环境条件仍需确认压降和温升；该工况不扩展为任意启动浪涌、感性回灌、全温或无限时长运行的保证。
 
 ![标称工作电压 3.3–28 V、3 A 恒流负载和 30.5 V 软件过压阈值对照](assets/voltage-boundaries.png)
 
@@ -121,7 +121,7 @@ voloo status
 
 ```sh
 # 将下面的示例 UID 替换为 voloo ls 实际列出的完整 UID
-voloo name CD-AB-05-F3-69-BE-3B-5D bench-a
+voloo name 5E-11-D0-00-00-00-00-01 bench-a
 ```
 
 昵称会保存在设备中，重新插拔后仍可使用。后文的 `bench-a` 都指你已经确认并命名的那台设备；也可以直接使用它的完整 UID。
@@ -140,7 +140,7 @@ voloo ui
 
 - **切换供电：** 按住设备开关约 0.6 秒。短按只显示提示，松开后不切换。
 - **查看详情：** 点击设备，查看详细状态、泄放、断电重启、改名和锁定等操作。
-- **锁定设备：** 锁定后，网页、终端、Agent 和 API 都不能改变这台设备的输出或昵称。
+- **锁定设备：** 锁定期间，网页、终端、Agent 和 API 的供电及改名操作会被拒绝；明确解锁后恢复。
 - **处理未知结果：** 先重新读取状态，确认设备实际处于什么状态，再决定下一步。
 
 ![voloo 设备详情中的输出开关、泄放、断电重启与状态显示](assets/device-controls-zh.png)
@@ -167,7 +167,7 @@ voloo ui --no-open
 | 关断输出 | `voloo off bench-a` | 不主动泄放，不代表输出已到 0 V |
 | 关断并主动泄放 | `voloo discharge bench-a` | 输出 ≤ 1 V 并确认后才算完成 |
 | 泄放后等待 2 秒，再上电 | `voloo cycle bench-a --off-ms 2000` | 适合重复冷启动；任一步失败就停止 |
-| 锁定 | `voloo lock bench-a` | 阻止所有客户端修改输出或昵称 |
+| 锁定 | `voloo lock bench-a` | 锁定期间拒绝供电及改名操作 |
 | 解锁 | `voloo unlock bench-a` | 解除软件操作锁 |
 | 查看故障 | `voloo faults bench-a` | 根据建议处理原因 |
 | 检查安装与连接 | `voloo doctor` | 检查 USB、权限、设备、读数和日志 |
@@ -197,7 +197,7 @@ voloo ui --no-open
 
 ## 6 接入 AI Agent
 
-voloo 提供通用的本地 stdio MCP 服务，不限于 Claude。先完成 npm 安装，再按客户端选择接入方式。由客户端启动 `voloo mcp`，不需要另开一个终端让它一直运行。
+voloo 提供本地 stdio MCP 服务；以下为不同客户端的配置示例，配置位置与权限设置依客户端版本而异。先完成 npm 安装，再按客户端选择接入方式。由客户端启动 `voloo mcp`，不需要另开一个终端让它一直运行。
 
 ### Codex
 
@@ -258,9 +258,9 @@ claude mcp add voloo -- voloo mcp
 }
 ```
 
-旧版 Local 配置使用 `.vscode/mcp.json` 和顶层 `servers`，格式不同。请按所用版本查看 [VS Code 官方 MCP 配置说明](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)，合并配置，不要直接覆盖已有文件。
+配置位置和格式依客户端版本而异。请查看 [VS Code 官方 MCP 配置说明](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)，合并配置，不要直接覆盖已有文件。
 
-### Gemini CLI Windsurf Cline 等其他客户端
+### 其他本地 MCP 客户端
 
 在客户端的 MCP 设置中选择本地 stdio 服务，填写：
 
@@ -299,7 +299,7 @@ Agent 可以使用以下工具：
 read_only = true
 ```
 
-这是 **voloo 的设置**，不是 Agent 的 MCP 配置。启用后，MCP 写入操作会被拒绝；需要阻止所有客户端操作某一台设备时，应使用 `voloo lock 设备名`。
+这是 **voloo 的设置**，不是 Agent 的 MCP 配置。启用后，MCP 写入操作会被拒绝；需要临时阻止各客户端修改某台设备的供电或昵称时，可使用 `voloo lock 设备名`。
 
 ## 7 过压保护与恢复供电
 

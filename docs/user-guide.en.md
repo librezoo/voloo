@@ -18,7 +18,7 @@ Three things to keep in mind:
 
 ## Tested operating range and overvoltage protection
 
-The project provider reported on 2026-11-14 that the current USB-C board works with a **3 A constant-current load across 3.3–28 V DC**. The nominal input range is **3.3–28 V DC**, and the **maximum recommended load current is 3 A. Exceeding 3 A can damage the hardware.** The report does not extend to arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
+The nominal input range is **3.3–28 V DC**. Operation with a **3 A constant-current load** in this range has been tested. The **maximum recommended load current is 3 A; exceeding 3 A can damage the hardware.** This condition does not establish support for arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
 
 Load power is `P = V × I`: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.
 
@@ -33,12 +33,11 @@ The firmware inhibits ON and turns off existing output when **valid measured VIN
 ## 1. Install
 
 You need any USB cable that carries data (USB-A or USB-C to USB-C, USB 2.0 or 3.0).
-No driver is needed on macOS 11+, Linux or Windows 10/11.
+The device uses system USB CDC drivers; no vendor-specific driver is required. Serial access may still need permission setup.
 
 | With | Command |
 | --- | --- |
 | npm (Node 18+) | `npm install -g @librezoo/voloo` — or run without installing: `npx @librezoo/voloo ls` |
-| pip / pipx / uv | `pipx install voloo` — or `uvx voloo ls` |
 | A downloaded binary | put `voloo` (`voloo.exe`) on your `PATH` |
 
 On Linux, add yourself to the serial group once and log in again:
@@ -52,10 +51,10 @@ No hardware yet? `voloo demo` opens the dashboard with simulated devices.
 ```sh
 voloo ls                         # every connected voloo, its state and readings
 voloo on bench-a                 # by nickname…
-voloo off CD-AB-05-F3-69-BE-3B-5D   # …or by UID
+voloo off 5E-11-D0-00-00-00-00-01   # …or by UID
 voloo discharge bench-a          # off, then drain the load to ≤ 1 V
 voloo cycle bench-a --off-ms 2000   # discharge, wait 2 s, on
-voloo name CD-AB-05-F3-69-BE-3B-5D bench-a   # nickname (output must be off)
+voloo name 5E-11-D0-00-00-00-00-01 bench-a   # nickname (output must be off)
 voloo ui                         # dashboard in your browser
 ```
 
@@ -89,19 +88,18 @@ and anything that needs attention.
 
 ## 4. AI agents (MCP)
 
-voloo includes an MCP server. Every tool that runs local MCP servers uses the same
-command, `voloo mcp`:
+voloo provides a local stdio MCP server, started with `voloo mcp`. The entries below are configuration examples; file locations and approval settings depend on the client version.
 
 | Tool | Setup |
 | --- | --- |
 | Claude Code | `claude mcp add voloo -- voloo mcp` |
 | Codex CLI | `~/.codex/config.toml`: `[mcp_servers.voloo]` then `command = "voloo"` and `args = ["mcp"]` |
 | Cursor | `~/.cursor/mcp.json`: `{"mcpServers": {"voloo": {"command": "voloo", "args": ["mcp"]}}}` |
-| VS Code (Copilot) | `.vscode/mcp.json`: `{"servers": {"voloo": {"type": "stdio", "command": "voloo", "args": ["mcp"]}}}` |
+| VS Code (Copilot) | Workspace-root `.mcp.json`: `{"mcpServers": {"voloo": {"type": "stdio", "command": "voloo", "args": ["mcp"], "tools": ["*"]}}}` |
 | Gemini CLI | `~/.gemini/settings.json`: `{"mcpServers": {"voloo": {"command": "voloo", "args": ["mcp"]}}}` |
-| Windsurf, Cline, Zed, others | the same `command` / `args` pair in their MCP settings |
+| Other local stdio MCP clients | configure the same `command` / `args` pair according to the client documentation |
 
-Without a global install, use `npx -y @librezoo/voloo mcp` or `uvx voloo mcp` as the command.
+Without a global install, clients that support executable arguments can use `command: "npx"` with `args: ["-y", "@librezoo/voloo", "mcp"]`. Configuration paths and executable lookup depend on the client and operating system.
 
 The agent gets five tools: `voloo_list_devices`, `voloo_get_status`, `voloo_power`
 (`on`, `off`, `discharge`, `cycle`), `voloo_set_nickname` and `voloo_get_log`. To let
@@ -205,11 +203,11 @@ cannot reach the API.
 idle_exit_s = 600                 # background process lifetime without clients
 [mcp]
 read_only = false                 # true: agents can read but not switch
-[devices."CD-AB-05-F3-69-BE-3B-5D"]
+[devices."5E-11-D0-00-00-00-00-01"]
 locked = true                     # nobody can switch this device (lift it here)
 [[ports]]                         # a port USB discovery does not report
 path = "/dev/ttyUSB3"
-uid = "CD-AB-05-F3-69-BE-3B-5D"
+uid = "5E-11-D0-00-00-00-00-01"
 ```
 
 `VOLOO_HOME` moves everything (settings, logs, reports) to another directory.
