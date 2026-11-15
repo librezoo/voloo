@@ -17,6 +17,10 @@ npm install -g @librezoo/voloo # or: npx @librezoo/voloo ls
 pipx install voloo         # or: uvx voloo ls
 ```
 
+When upgrading an already running host, wait for device operations to finish,
+run `voloo daemon stop` once, then use the new `voloo ls` to start its replacement.
+This is separate from ordinary firmware updating, which keeps the daemon running.
+
 ## Build
 
 ```sh
