@@ -132,6 +132,23 @@ impl Rig {
             .map_err(|e| format!("{e:?}"))
             .unwrap()
     }
+    fn mcp(&self, name: &str, args: Value) -> Value {
+        let (status, response) = self.http(
+            "POST",
+            "/mcp",
+            Some(json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": name, "arguments": args}})),
+        );
+        assert_eq!(status, 200, "{response}");
+        let result = response["result"].clone();
+        let text: Value =
+            serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            text, result["structuredContent"],
+            "text and structured replies agree"
+        );
+        result
+    }
     /// Waits until the background process sees both devices online.
     fn ready(&self) {
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -478,6 +495,331 @@ fn read_only_mcp_and_locked_devices() {
     assert!(
         rig.sims[1].state.lock().unwrap().writes.is_empty(),
         "nothing sent to the locked device"
+    );
+}
+
+#[test]
+fn mcp_power_nickname_and_target_resolution() {
+    let rig = Rig::new("", 600);
+    rig.ready();
+    let call = |name, args| {
+        let r = rig.mcp(name, args);
+        assert_eq!(r["isError"], false, "{r}");
+        r["structuredContent"].clone()
+    };
+    let on = call("voloo_power", json!({"device": "bench-a", "action": "on"}));
+    assert_eq!(on["status"]["power_state"], "ON");
+    let r = call("voloo_power", json!({"device": UID_A, "action": "on"}));
+    assert_eq!(r["outcome"], "already_satisfied");
+    let r = rig.mcp(
+        "voloo_set_nickname",
+        json!({"device": UID_A, "nickname": "busy"}),
+    );
+    assert_eq!(r["structuredContent"]["error"]["code"], "busy");
+    assert_eq!(rig.sims[0].state.lock().unwrap().nickname_writes, 0);
+    let off = call("voloo_power", json!({"device": UID_A, "action": "off"}));
+    assert_eq!(off["status"]["power_state"], "OFF");
+    let r = call("voloo_power", json!({"device": UID_A, "action": "off"}));
+    assert_eq!(r["outcome"], "already_satisfied");
+    call("voloo_power", json!({"device": UID_A, "action": "on"}));
+    let r = call(
+        "voloo_power",
+        json!({"device": UID_A, "action": "discharge"}),
+    );
+    assert_eq!(r["status"]["low_qualified"], true);
+    assert!(r["status"]["vout_mv"].as_u64().unwrap() <= 1000);
+    let r = call(
+        "voloo_power",
+        json!({"device": UID_A, "action": "discharge"}),
+    );
+    assert_eq!(r["outcome"], "already_satisfied");
+    for discharge in [true, false] {
+        let r = call(
+            "voloo_power",
+            json!({"device": UID_A, "action": "cycle", "off_ms": 20, "discharge": discharge}),
+        );
+        assert_eq!(
+            r["off"]["action"],
+            if discharge { "discharge" } else { "off" }
+        );
+        assert_eq!(r["on"]["status"]["power_state"], "ON");
+    }
+    call("voloo_power", json!({"device": UID_A, "action": "off"}));
+    for nickname in ["temporary", "零号测试零号测试", ""] {
+        let r = call(
+            "voloo_set_nickname",
+            json!({"device": UID_A, "nickname": nickname}),
+        );
+        assert_eq!(r["verified"], true);
+        let r = call(
+            "voloo_get_status",
+            json!({"device": UID_A, "include": ["info", "communication", "adc"]}),
+        );
+        assert_eq!(r["info"]["nickname"], nickname);
+        assert_eq!(r["adc"]["supported"], true);
+        if !nickname.is_empty() {
+            let r = call("voloo_get_status", json!({"device": nickname}));
+            assert_eq!(r["uid"], UID_A);
+        }
+    }
+    for uid in [UID_A, UID_B] {
+        call(
+            "voloo_set_nickname",
+            json!({"device": uid, "nickname": "duplicate"}),
+        );
+    }
+    let writes = rig.sims[0].state.lock().unwrap().writes.clone();
+    let r = rig.mcp(
+        "voloo_power",
+        json!({"device": "duplicate", "action": "on"}),
+    );
+    assert_eq!(
+        r["isError"], true,
+        "ambiguous nicknames must not select a device: {r}"
+    );
+    assert_eq!(rig.sims[0].state.lock().unwrap().writes, writes);
+    assert!(rig.sims[1].state.lock().unwrap().writes.is_empty());
+    let r = call(
+        "voloo_get_log",
+        json!({"device": UID_A, "kind": "operations", "limit": 100}),
+    );
+    assert!(
+        r["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["source"] == "mcp")
+    );
+    let r = call(
+        "voloo_get_log",
+        json!({"device": UID_A, "kind": "trace", "trace_id": on["trace_id"]}),
+    );
+    assert!(!r["records"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn mcp_invalid_arguments_and_write_restrictions_do_not_mutate_devices() {
+    let rig = Rig::new("", 600);
+    rig.ready();
+    let cases = [
+        ("voloo_power", json!({"action": "on"})),
+        ("voloo_power", json!({"device": UID_A})),
+        ("voloo_power", json!({"device": UID_A, "action": "invalid"})),
+        (
+            "voloo_power",
+            json!({"device": UID_A, "action": "cycle", "off_ms": -1}),
+        ),
+        (
+            "voloo_power",
+            json!({"device": UID_A, "action": "cycle", "off_ms": 30001}),
+        ),
+        (
+            "voloo_power",
+            json!({"device": UID_A, "action": "cycle", "off_ms": 1.5}),
+        ),
+        (
+            "voloo_power",
+            json!({"device": UID_A, "action": "cycle", "discharge": "false"}),
+        ),
+        (
+            "voloo_power",
+            json!({"device": "no-such-device", "action": "on"}),
+        ),
+        ("voloo_set_nickname", json!({"nickname": "x"})),
+        ("voloo_set_nickname", json!({"device": UID_A})),
+        (
+            "voloo_set_nickname",
+            json!({"device": UID_A, "nickname": "零".repeat(9)}),
+        ),
+        ("voloo_get_status", json!({})), // Two devices: target is required.
+        (
+            "voloo_get_status",
+            json!({"device": UID_A, "include": ["invalid"]}),
+        ),
+        ("voloo_get_log", json!({"kind": "invalid"})),
+    ];
+    for (name, args) in cases {
+        let r = rig.mcp(name, args.clone());
+        assert_eq!(r["isError"], true, "{name} {args}: {r}");
+    }
+    for sim in &rig.sims {
+        let s = sim.state.lock().unwrap();
+        assert!(s.writes.is_empty());
+        assert_eq!(s.nickname_writes, 0);
+    }
+    drop(rig);
+    let rig = Rig::new(
+        &format!("[mcp]\nread_only = true\n[devices.\"{UID_B}\"]\nlocked = true\n"),
+        600,
+    );
+    rig.ready();
+    for (name, args) in [
+        ("voloo_power", json!({"device": UID_A, "action": "on"})),
+        (
+            "voloo_set_nickname",
+            json!({"device": UID_A, "nickname": "x"}),
+        ),
+    ] {
+        assert_eq!(rig.mcp(name, args)["isError"], true);
+    }
+    assert_eq!(
+        rig.mcp("voloo_get_status", json!({"device": UID_A}))["isError"],
+        false
+    );
+    for sim in &rig.sims {
+        assert!(sim.state.lock().unwrap().writes.is_empty());
+        assert_eq!(sim.state.lock().unwrap().nickname_writes, 0);
+    }
+    drop(rig);
+    let rig = Rig::new(&format!("[devices.\"{UID_A}\"]\nlocked = true\n"), 600);
+    rig.ready();
+    for (name, args) in [
+        ("voloo_power", json!({"device": UID_A, "action": "on"})),
+        (
+            "voloo_set_nickname",
+            json!({"device": UID_A, "nickname": "x"}),
+        ),
+    ] {
+        let r = rig.mcp(name, args);
+        assert_eq!(r["isError"], true);
+        assert!(
+            r["structuredContent"]["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("locked")
+        );
+    }
+    assert_eq!(
+        rig.mcp("voloo_get_status", json!({"device": UID_A}))["isError"],
+        false
+    );
+    assert!(rig.sims[0].state.lock().unwrap().writes.is_empty());
+    assert_eq!(rig.sims[0].state.lock().unwrap().nickname_writes, 0);
+}
+
+#[test]
+fn mcp_lost_ack_and_unknown_outcomes_never_resend() {
+    let rig = Rig::new("idle_poll_ms = 60000\n", 600);
+    rig.ready();
+    rig.sims[0].state.lock().unwrap().inject.drop_control_ack = 1;
+    let r = rig.mcp("voloo_power", json!({"device": UID_A, "action": "on"}));
+    assert_eq!(r["isError"], false, "{r}");
+    assert_eq!(r["structuredContent"]["outcome"], "completed");
+    assert_eq!(r["structuredContent"]["acknowledged"], false);
+    assert_eq!(rig.sims[0].state.lock().unwrap().writes, vec![1]);
+    rig.sims[1].state.lock().unwrap().inject.ignore_control = true;
+    let r = rig.mcp("voloo_power", json!({"device": UID_B, "action": "on"}));
+    assert_eq!(r["isError"], true, "{r}");
+    assert_eq!(r["structuredContent"]["error"]["code"], "unknown");
+    assert_eq!(rig.sims[1].state.lock().unwrap().writes, vec![1]);
+    // Follow the error instruction: read status rather than repeat the write.
+    let r = rig.mcp("voloo_get_status", json!({"device": UID_B}));
+    assert_eq!(r["structuredContent"]["power_state"], "OFF");
+    assert_eq!(rig.sims[1].state.lock().unwrap().writes, vec![1]);
+    let r = rig.mcp(
+        "voloo_get_log",
+        json!({"device": UID_B, "kind": "operations"}),
+    );
+    assert!(
+        r["structuredContent"]["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["outcome"] == "unknown")
+    );
+}
+
+#[test]
+fn mcp_failed_discharge_stops_cycle_and_invalid_measurements_stay_null() {
+    let rig = Rig::new("idle_poll_ms = 60000\n", 600);
+    rig.ready();
+    {
+        let mut s = rig.sims[0].state.lock().unwrap();
+        s.cfg.discharge_fall = None;
+        s.cfg.discharge_limit = Duration::from_millis(100);
+    }
+    assert_eq!(
+        rig.mcp("voloo_power", json!({"device": UID_A, "action": "on"}))["isError"],
+        false
+    );
+    let r = rig.mcp(
+        "voloo_power",
+        json!({"device": UID_A, "action": "cycle", "off_ms": 0}),
+    );
+    assert_eq!(r["isError"], true, "{r}");
+    assert_eq!(r["structuredContent"]["error"]["code"], "device_failed");
+    assert_eq!(
+        rig.sims[0].state.lock().unwrap().writes,
+        vec![1, 2],
+        "no ON after discharge failure"
+    );
+    {
+        let mut s = rig.sims[1].state.lock().unwrap();
+        s.inject.vin_invalid = true;
+        s.inject.vout_invalid = true;
+        s.inject.missing_adc_block = true;
+    }
+    let r = rig.mcp(
+        "voloo_get_status",
+        json!({"device": UID_B, "include": ["adc"]}),
+    );
+    let s = &r["structuredContent"];
+    assert_eq!(r["isError"], false, "{r}");
+    assert_eq!(s["vin_valid"], false);
+    assert_eq!(s["vout_valid"], false);
+    assert!(s["vin_mv"].is_null() && s["vout_mv"].is_null());
+    assert_eq!(s["adc"]["supported"], false);
+    assert!(
+        s["faults"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| !f["suggestion"].as_str().unwrap().is_empty())
+    );
+    let r = rig.mcp(
+        "voloo_power",
+        json!({"device": UID_B, "action": "cycle", "off_ms": 0}),
+    );
+    assert_eq!(r["isError"], true, "{r}");
+    assert_eq!(rig.sims[1].state.lock().unwrap().writes, vec![2]);
+    let r = rig.mcp("voloo_get_log", json!({"device": UID_B, "kind": "faults"}));
+    assert!(
+        !r["structuredContent"]["records"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn mcp_connection_lost_after_command_is_unknown_without_replay() {
+    let rig = Rig::new("idle_poll_ms = 60000\n", 600);
+    rig.ready();
+    rig.sims[0].state.lock().unwrap().inject.drop_control_ack = 1;
+    // Close the OS pseudo-terminal after the command arrives, before readback.
+    let (state, stop) = (rig.sims[0].state.clone(), rig.sims[0].stop.clone());
+    let unplug = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while state.lock().unwrap().writes.is_empty() {
+            assert!(Instant::now() < deadline, "control write never arrived");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        stop.store(true, Ordering::Relaxed);
+    });
+    let r = rig.mcp("voloo_power", json!({"device": UID_A, "action": "on"}));
+    unplug.join().unwrap();
+    assert_eq!(r["isError"], true, "{r}");
+    assert_eq!(r["structuredContent"]["error"]["code"], "unknown");
+    assert_eq!(rig.sims[0].state.lock().unwrap().writes, vec![1]);
+    let r = rig.mcp("voloo_get_status", json!({"device": UID_A}));
+    assert_eq!(
+        r["isError"], true,
+        "unreachable device must not appear OFF: {r}"
+    );
+    assert_eq!(
+        rig.sims[0].state.lock().unwrap().writes,
+        vec![1],
+        "readback does not replay the command"
     );
 }
 
