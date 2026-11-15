@@ -15,7 +15,9 @@ export function publishPackage(name, version, file, run = execFileSync) {
     try { code = JSON.parse(error.stdout?.toString()).error?.code; } catch { /* Not a registry JSON error. */ }
     if (code !== 'E404') throw error;
   }
-  const tag = version.includes('-') ? 'next' : 'latest';
+  // The release workflow promotes latest only after its clean registry install.
+  // A successful publish alone does not mean optional platform packages are readable yet.
+  const tag = 'next';
   run('npm', ['publish', file, '--access', 'public', '--tag', tag], { stdio: 'inherit' });
 }
 

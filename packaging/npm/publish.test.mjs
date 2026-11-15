@@ -14,14 +14,14 @@ test('a partial release skips an existing version', () => {
   assert.deepEqual(calls, [['npm', 'view', `@librezoo/voloo@${version}`, 'version', '--json']]);
 });
 
-test('only a missing version is published, with the correct release tag', () => {
-  for (const [release, tag] of [[version, 'next'], ['0.7.0', 'latest']]) {
+test('missing prerelease and stable versions are staged before verified promotion', () => {
+  for (const release of [version, '0.7.0']) {
     const calls = [];
     publishPackage('@librezoo/voloo', release, 'main.tgz', (command, args) => {
       calls.push([command, ...args]);
       if (args[0] === 'view') throw registryError('E404');
     });
-    assert.deepEqual(calls[1], ['npm', 'publish', 'main.tgz', '--access', 'public', '--tag', tag]);
+    assert.deepEqual(calls[1], ['npm', 'publish', 'main.tgz', '--access', 'public', '--tag', 'next']);
   }
 });
 
