@@ -22,6 +22,53 @@ use voloo::{
 const UID_A: &str = "01-23-45-67-89-AB-CD-EF";
 const UID_B: &str = "11-22-33-44-55-66-77-88";
 
+#[test]
+fn hardware_revision_survives_updates_and_old_identity_software_is_refused() {
+    let rig = Rig::new("", 600);
+    {
+        let mut state = rig.sims[0].state.lock().unwrap();
+        state.enable_ab();
+        state.firmware.as_mut().unwrap().versions = [0x302, 0x302];
+    }
+    rig.ready();
+    let file = rig.home().join("new.voloofw");
+    std::fs::write(&file, serde_json::to_vec(&firmware_package(0x303)).unwrap()).unwrap();
+    let (code, result) = rig.run(&["firmware", "update", UID_A, file.to_str().unwrap()]);
+    assert_eq!(code, 0, "{result}");
+    let (code, info) = rig.run(&["info", UID_A]);
+    assert_eq!(code, 0);
+    assert_eq!(info["hardware_version"], "0.2");
+    let (code, result) = rig.run(&["firmware", "rollback", UID_A]);
+    assert_eq!(code, 0, "{result}");
+    let (_, info) = rig.run(&["info", UID_A]);
+    assert_eq!(info["hardware_version"], "0.2");
+    let before = rig.sims[0]
+        .state
+        .lock()
+        .unwrap()
+        .firmware
+        .as_ref()
+        .unwrap()
+        .actions
+        .clone();
+    std::fs::write(&file, serde_json::to_vec(&firmware_package(0x301)).unwrap()).unwrap();
+    let (code, _) = rig.run(&["firmware", "update", UID_A, file.to_str().unwrap()]);
+    assert_ne!(code, 0);
+    let after = rig.sims[0]
+        .state
+        .lock()
+        .unwrap()
+        .firmware
+        .as_ref()
+        .unwrap()
+        .actions
+        .clone();
+    assert!(
+        after[before.len()..].iter().all(|op| *op == 0),
+        "Refused downgrade emitted modifying operations"
+    );
+}
+
 struct Sim {
     path: String,
     slave: Option<serialport::TTYPort>,

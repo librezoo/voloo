@@ -22,6 +22,42 @@ pub const MAX_FILE: usize = 512 * 1024;
 const SLOT_BYTES: usize = 24 * 1024;
 const FACTORY_BYTES: usize = 58 * 1024;
 
+fn supported_x035_hardware(value: &str) -> bool {
+    matches!(value, "0.2" | "3.0")
+}
+fn revision_allows_update(hardware: &str, current: &str, target: u16) -> Result<(), OpError> {
+    if !supported_x035_hardware(hardware) || (target >= 0x302 && hardware != "0.2") {
+        return Err(invalid(
+            "This firmware requires supported hardware identity 0.2; service migration is required for older devices",
+        ));
+    }
+    let current = current
+        .split_once('.')
+        .and_then(|(a, b)| Some((a.parse::<u16>().ok()? << 8) | b.parse::<u16>().ok()?))
+        .ok_or_else(|| invalid("Unrecognized firmware version"))?;
+    if hardware == "0.2" && current >= 0x302 && target < 0x302 {
+        return Err(invalid(
+            "Selected firmware predates support for this device's hardware identity",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod hardware_identity_tests {
+    use super::*;
+    #[test]
+    fn persistent_revision_cannot_be_invented_by_update_or_lost_to_legacy_firmware() {
+        assert!(revision_allows_update("3.0", "3.1", 0x302).is_err());
+        assert!(revision_allows_update("0.2", "3.2", 0x301).is_err());
+        assert!(revision_allows_update("0.2", "3.2", 0x303).is_ok());
+        assert!(revision_allows_update("3.0", "3.0", 0x301).is_ok());
+        for unknown in ["0.3", "255.255", "1.0"] {
+            assert!(revision_allows_update(unknown, "3.2", 0x303).is_err());
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct Progress {
     pub stage: String,
@@ -491,7 +527,7 @@ fn verify_once(
 ) -> Result<(Identity, Status), OpError> {
     let info = device.info()?;
     if info.identity.uid != device.uid
-        || info.identity.hardware_version != "3.0"
+        || !supported_x035_hardware(&info.identity.hardware_version)
         || info.identity.device_type != 1
     {
         return Err(failed("Device identity changed across the update"));
@@ -500,6 +536,9 @@ fn verify_once(
         return Err(failed(
             "Running firmware version does not match the selected package",
         ));
+    }
+    if expected.is_some_and(|v| v >= 0x302) && info.identity.hardware_version != "0.2" {
+        return Err(failed("Expected persistent hardware identity 0.2"));
     }
     if info.nickname.as_deref() != Some(nickname) {
         return Err(failed("Nickname changed across the update"));
@@ -903,7 +942,7 @@ pub fn perform_online(
 ) -> Result<Value, OpError> {
     progress(Progress::new("checking", 0, true));
     let info = device.info()?;
-    if info.identity.hardware_version != "3.0"
+    if !supported_x035_hardware(&info.identity.hardware_version)
         || info.identity.capabilities & protocol::CAP_SEALED == 0
     {
         return Err(invalid(
@@ -1147,7 +1186,9 @@ pub fn perform(
     progress(Progress::new("checking", 0, true));
     let before = wait_off(device, Duration::from_secs(1))?;
     let original = device.info()?;
-    if original.identity.hardware_version != "3.0" || original.identity.device_type != 1 {
+    if !supported_x035_hardware(&original.identity.hardware_version)
+        || original.identity.device_type != 1
+    {
         return Err(invalid("Firmware updates require a direct X035 USB Switch"));
     }
     let nickname = original.nickname.unwrap_or_default();
@@ -1156,6 +1197,11 @@ pub fn perform(
             let initial = ab_request(device, &trace, 0, &[])?;
             let (target, version) = if let Some(image) = &image {
                 let version = validate_package_for_device(image, &initial)?;
+                revision_allows_update(
+                    &original.identity.hardware_version,
+                    &original.identity.firmware_version,
+                    version,
+                )?;
                 (
                     transfer(device, &trace, image, &initial, progress)?,
                     version,
@@ -1164,6 +1210,11 @@ pub fn perform(
                 let target = initial
                     .previous_slot
                     .ok_or_else(|| busy("No previous firmware is available for rollback"))?;
+                revision_allows_update(
+                    &original.identity.hardware_version,
+                    &original.identity.firmware_version,
+                    initial.versions[target as usize],
+                )?;
                 ab_request(device, &trace, 5, &[])?;
                 (target, initial.versions[target as usize])
             };

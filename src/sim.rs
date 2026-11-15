@@ -14,6 +14,7 @@ use std::{
 #[derive(Clone, Debug)]
 pub struct SimConfig {
     pub uid: Uid,
+    pub hardware_version: u16,
     pub vin_mv: u16,
     pub interlock: Duration,
     /// Time for VOUT to fall below 1 V once discharge starts (None: never falls).
@@ -25,6 +26,7 @@ impl Default for SimConfig {
     fn default() -> Self {
         SimConfig {
             uid: "01-23-45-67-89-AB-CD-EF".parse().unwrap(),
+            hardware_version: 2,
             vin_mv: 7500,
             interlock: Duration::from_millis(10),
             discharge_fall: Some(Duration::from_millis(40)),
@@ -448,7 +450,7 @@ impl SimState {
                     self.firmware
                         .as_ref()
                         .map_or(0x0207, |f| f.versions[f.running as usize]),
-                    0x0300,
+                    self.cfg.hardware_version,
                     u16::from_be_bytes([u[0], u[1]]),
                     u16::from_be_bytes([u[2], u[3]]),
                     u16::from_be_bytes([u[4], u[5]]),
