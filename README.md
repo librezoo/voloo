@@ -4,7 +4,7 @@ Local host software for the USB-C voloo Switch. One `voloo` executable talks to
 each Switch over its own USB cable (USB CDC, no driver needed on macOS, Linux or
 Windows 10/11) and offers the same functions as a CLI, an MCP server for AI agents
 a local HTTP API for any language and a web dashboard for every connected voloo.
-See the [中文使用说明](docs/user-guide.md) · [English guide](docs/user-guide.en.md) · [品牌素材](branding/README.md).
+See the [中文使用说明](docs/user-guide.md) · [English guide](docs/user-guide.en.md) · [刷写与通用升级教程](docs/firmware-updates.zh.md) · [品牌素材](branding/README.md).
 
 voloo only switches the externally supplied SOURCE power; it is not a power source.
 **OFF does not mean the load terminals are at zero volts** — use `discharge` to
