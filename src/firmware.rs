@@ -52,6 +52,7 @@ pub struct AbStatus {
     pub upload_slot: Option<u8>,
     pub upload_failed: bool,
     pub encrypted: bool,
+    pub universal: bool,
     pub protection_flags: u8,
     pub versions: [u16; 2],
     pub lengths: [u16; 2],
@@ -64,11 +65,11 @@ pub struct AbStatus {
 impl AbStatus {
     pub fn decode(p: &[u8]) -> Result<Self, OpError> {
         if p.len() != 32
-            || !matches!(p[0], 1 | 2)
+            || !matches!(p[0], 1..=3)
             || p[1] > 1
             || p[2] > 1
             || p[5] > 2
-            || p[7] > if p[0] == 2 { 15 } else { 1 }
+            || p[7] > if p[0] >= 2 { 15 } else { 1 }
         {
             return Err(failed("Invalid A/B status response"));
         }
@@ -89,7 +90,8 @@ impl AbStatus {
             trial_state: p[5],
             upload_slot: slot(p[6])?,
             upload_failed: p[7] & 1 != 0,
-            encrypted: p[0] == 2,
+            encrypted: p[0] >= 2,
+            universal: p[0] == 3,
             protection_flags: p[7] & 14,
             versions: [w(8), w(10)],
             lengths: [w(12), w(14)],
@@ -119,6 +121,7 @@ pub struct Bundle {
     pub factory: Vec<u8>,
 }
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Recipient {
     pub uid: String,
     pub nonce: Vec<u8>,
@@ -126,6 +129,7 @@ pub struct Recipient {
     pub tag: Vec<u8>,
 }
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SealedBundle {
     pub format: String,
     pub hardware_version: u16,
@@ -133,18 +137,31 @@ pub struct SealedBundle {
     pub header: Vec<u8>,
     pub cipher_a: Vec<u8>,
     pub cipher_b: Vec<u8>,
-    pub recipients: Vec<Recipient>,
+    pub third_party_notices: Option<String>,
+    pub recipients: Option<Vec<Recipient>>,
+    pub universal: Option<Box<UniversalEnvelope>>,
+}
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UniversalEnvelope {
+    pub key_id: u32,
+    pub nonce: Vec<u8>,
+    pub wrapped_key: Vec<u8>,
+    pub tag: Vec<u8>,
 }
 impl SealedBundle {
     fn word(&self, offset: usize) -> u16 {
         u16::from_be_bytes([self.header[offset], self.header[offset + 1]])
     }
     fn validate(&self) -> Result<(), OpError> {
-        if self.format != "voloo-x035-sealed-v1"
-            || self.hardware_version != 0x300
-            || self.firmware_version < 0x300
+        let v1 = self.format == "voloo-x035-sealed-v1";
+        let v2 = self.format == "voloo-x035-sealed-v2";
+        if (!v1 && !v2)
+            || self.hardware_version != 0x0300
+            || (v1 && self.firmware_version < 0x0300)
+            || (v2 && self.firmware_version < 0x0301)
             || self.header.len() != 48
-            || &self.header[..4] != b"VSE1"
+            || &self.header[..4] != if v1 { b"VSE1" } else { b"VSE2" }
             || self.word(4) != self.hardware_version
             || self.word(6) != self.firmware_version
         {
@@ -162,8 +179,31 @@ impl SealedBundle {
                 return Err(invalid("Invalid encrypted slot size"));
             }
         }
+        if v1 && self.universal.is_some() {
+            return Err(invalid(
+                "VSE1 packages cannot contain a universal key envelope",
+            ));
+        }
+        if v2 && self.recipients.is_some() {
+            return Err(invalid("VSE2 packages must not contain recipient tickets"));
+        }
+        if v2 {
+            let envelope = self
+                .universal
+                .as_ref()
+                .ok_or_else(|| invalid("VSE2 package is missing its universal key envelope"))?;
+            if envelope.key_id == 0
+                || envelope.key_id == u32::MAX
+                || envelope.nonce.len() != 24
+                || envelope.wrapped_key.len() != 32
+                || envelope.tag.len() != 16
+                || u32::from_le_bytes(envelope.nonce[..4].try_into().unwrap()) != envelope.key_id
+            {
+                return Err(invalid("Invalid or unbound VSE2 universal key envelope"));
+            }
+        }
         let mut seen = std::collections::BTreeSet::new();
-        for r in &self.recipients {
+        for r in self.recipients.as_deref().unwrap_or_default() {
             let uid = r
                 .uid
                 .parse::<Uid>()
@@ -176,7 +216,7 @@ impl SealedBundle {
                 return Err(invalid("Invalid encrypted device ticket"));
             }
         }
-        if seen.is_empty() {
+        if v1 && seen.is_empty() {
             return Err(invalid("Encrypted firmware has no enrolled device ticket"));
         }
         Ok(())
@@ -197,7 +237,10 @@ impl Image {
         if data.iter().copied().find(|b| !b.is_ascii_whitespace()) == Some(b'{') {
             let shape: Value = serde_json::from_slice(data)
                 .map_err(|e| invalid(format!("Invalid firmware JSON: {e}")))?;
-            if shape["format"] == "voloo-x035-sealed-v1" {
+            if matches!(
+                shape["format"].as_str(),
+                Some("voloo-x035-sealed-v1" | "voloo-x035-sealed-v2")
+            ) {
                 if [
                     "factory",
                     "slot_a",
@@ -212,6 +255,14 @@ impl Image {
                 {
                     return Err(invalid(
                         "Private/plaintext fields cannot be included in a distributable encrypted package",
+                    ));
+                }
+                let is_v2 = shape["format"] == "voloo-x035-sealed-v2";
+                if (is_v2 && shape.get("recipients").is_some())
+                    || (!is_v2 && shape.get("universal").is_some())
+                {
+                    return Err(invalid(
+                        "Encrypted package mixes VSE1 recipient tickets and VSE2 universal fields",
                     ));
                 }
                 let sealed: SealedBundle =
@@ -267,7 +318,7 @@ pub fn inspect(data: &[u8]) -> Result<Value, OpError> {
     let image = Image::parse(data)?;
     match image {
         Image::Sealed(bundle) => Ok(
-            json!({"encrypted":true,"format":bundle.format,"hardware_version":protocol::version(bundle.hardware_version),"firmware_version":protocol::version(bundle.firmware_version),"recipients":bundle.recipients.len(),"bytes":data.len(),"authentication":"verified by the device, not by offline inspection"}),
+            json!({"encrypted":true,"format":bundle.format,"hardware_version":protocol::version(bundle.hardware_version),"firmware_version":protocol::version(bundle.firmware_version),"recipients":bundle.recipients.as_ref().map(Vec::len),"key_id":bundle.universal.as_ref().map(|key|key.key_id),"bytes":data.len(),"authentication":"verified by the device, not by offline inspection"}),
         ),
         _ => Err(invalid(
             "This release requires an encrypted firmware package; plaintext publishing was refused",
@@ -464,7 +515,24 @@ struct TransferPlan {
     begin: Vec<u8>,
     packets: Vec<Vec<u8>>,
 }
+fn validate_package_for_device(image: &Image, initial: &AbStatus) -> Result<u16, OpError> {
+    match image {
+        Image::Sealed(bundle) if bundle.format == "voloo-x035-sealed-v2" && !initial.universal => {
+            Err(invalid(
+                "This universal-key package requires firmware 3.1 or newer. Firmware 3.0 must first complete the trusted local migration to universal-key firmware; no update command was sent.",
+            ))
+        }
+        Image::Sealed(bundle) if initial.encrypted => Ok(bundle.firmware_version),
+        Image::Ab(bundle) if !initial.encrypted => Ok(bundle.firmware_version),
+        _ => Err(invalid(
+            "Encrypted devices require sealed firmware; legacy devices require trusted initialization before sealed updates",
+        )),
+    }
+}
 fn transfer_plan(image: &Image, uid: Uid, slot: u8) -> Result<TransferPlan, OpError> {
+    if slot > 1 {
+        return Err(invalid("Invalid A/B upload slot"));
+    }
     match image {
         Image::Ab(bundle) => {
             let app = if slot == 0 {
@@ -495,7 +563,6 @@ fn transfer_plan(image: &Image, uid: Uid, slot: u8) -> Result<TransferPlan, OpEr
             })
         }
         Image::Sealed(bundle) => {
-            let recipient=bundle.recipients.iter().find(|r|r.uid.parse::<Uid>().ok()==Some(uid)).ok_or_else(||invalid("No encrypted ticket exists for this UID; trusted factory enrolment is required"))?;
             let length = bundle.word(8 + 2 * slot as usize) as usize;
             let cipher = if slot == 0 {
                 &bundle.cipher_a
@@ -504,9 +571,28 @@ fn transfer_plan(image: &Image, uid: Uid, slot: u8) -> Result<TransferPlan, OpEr
             };
             let mut begin = vec![slot];
             begin.extend_from_slice(&bundle.header);
-            begin.extend_from_slice(&recipient.nonce);
-            begin.extend_from_slice(&recipient.wrapped_key);
-            begin.extend_from_slice(&recipient.tag);
+            if bundle.format == "voloo-x035-sealed-v1" {
+                let recipient = bundle
+                    .recipients
+                    .as_ref()
+                    .and_then(|recipients| {
+                        recipients.iter().find(|r| r.uid.parse::<Uid>().ok() == Some(uid))
+                    })
+                    .ok_or_else(|| {
+                        invalid("No encrypted ticket exists for this UID; trusted factory enrolment is required")
+                    })?;
+                begin.extend_from_slice(&recipient.nonce);
+                begin.extend_from_slice(&recipient.wrapped_key);
+                begin.extend_from_slice(&recipient.tag);
+            } else {
+                let envelope = bundle
+                    .universal
+                    .as_ref()
+                    .ok_or_else(|| invalid("VSE2 package is missing its universal key envelope"))?;
+                begin.extend_from_slice(&envelope.nonce);
+                begin.extend_from_slice(&envelope.wrapped_key);
+                begin.extend_from_slice(&envelope.tag);
+            }
             let mut packets = Vec::new();
             let mut encrypted_offset = 0;
             for offset in (0..length).step_by(128) {
@@ -1069,15 +1155,7 @@ pub fn perform(
         if original.identity.capabilities & (CAP_AB_UPDATE | protocol::CAP_SEALED) != 0 {
             let initial = ab_request(device, &trace, 0, &[])?;
             let (target, version) = if let Some(image) = &image {
-                let version = match image {
-                    Image::Sealed(bundle) if initial.encrypted => bundle.firmware_version,
-                    Image::Ab(bundle) if !initial.encrypted => bundle.firmware_version,
-                    _ => {
-                        return Err(invalid(
-                            "Encrypted devices require sealed firmware; legacy devices require trusted initialization before sealed updates",
-                        ));
-                    }
-                };
+                let version = validate_package_for_device(image, &initial)?;
                 (
                     transfer(device, &trace, image, &initial, progress)?,
                     version,
@@ -1147,13 +1225,26 @@ pub fn perform(
 #[cfg(test)]
 mod download_tests {
     use super::*;
+    fn universal_file() -> Vec<u8> {
+        let key_id = 0x1234_5678u32;
+        let mut header = vec![0; 48];
+        header[..4].copy_from_slice(b"VSE2");
+        header[4..8].copy_from_slice(&[3, 0, 3, 1]);
+        header[8..12].copy_from_slice(&[2, 0, 2, 0]);
+        header[32] = 1;
+        let mut nonce = key_id.to_le_bytes().to_vec();
+        nonce.extend_from_slice(&[0xA5; 20]);
+        serde_json::to_vec(&json!({"format":"voloo-x035-sealed-v2","hardware_version":0x300,"firmware_version":0x301,"third_party_notices":"Monocypher license",
+            "header":header,"cipher_a":vec![0u8;576],"cipher_b":vec![0u8;576],
+            "universal":{"key_id":key_id,"nonce":nonce,"wrapped_key":vec![0x5A;32],"tag":vec![0xC3;16]}})).unwrap()
+    }
     fn encrypted_file() -> Vec<u8> {
         let mut header = vec![0; 48];
         header[..4].copy_from_slice(b"VSE1");
         header[4..8].copy_from_slice(&[3, 0, 3, 0]);
         header[8..12].copy_from_slice(&[2, 0, 2, 0]);
         header[32] = 1;
-        serde_json::to_vec(&json!({"format":"voloo-x035-sealed-v1","hardware_version":0x300,"firmware_version":0x300,
+        serde_json::to_vec(&json!({"format":"voloo-x035-sealed-v1","hardware_version":0x300,"firmware_version":0x300,"third_party_notices":"Monocypher license",
             "header":header,"cipher_a":vec![0u8;576],"cipher_b":vec![0u8;576],
             "recipients":[{"uid":"01-02-03-04-05-06-07-08","nonce":vec![0u8;24],"wrapped_key":vec![0u8;32],"tag":vec![0u8;16]}]})).unwrap()
     }
@@ -1175,6 +1266,49 @@ mod download_tests {
         })();
         assert!(outcome.is_err());
         assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn universal_begin_envelope_is_common_while_outer_uid_stays_routed() {
+        let image = Image::parse(&universal_file()).unwrap();
+        let uid_a: Uid = "01-02-03-04-05-06-07-08".parse().unwrap();
+        let uid_b: Uid = "11-12-13-14-15-16-17-18".parse().unwrap();
+        for slot in 0..=1 {
+            let a = transfer_plan(&image, uid_a, slot).unwrap();
+            let b = transfer_plan(&image, uid_b, slot).unwrap();
+            assert_eq!(a.begin, b.begin);
+            assert_eq!(a.begin.len(), 121);
+        }
+        let begin = transfer_plan(&image, uid_a, 1).unwrap().begin;
+        let request_a = protocol::firmware_request_on(uid_a, 0x4a, 1, &begin).unwrap();
+        let request_b = protocol::firmware_request_on(uid_b, 0x4a, 1, &begin).unwrap();
+        assert_ne!(&request_a.frame[2..10], &request_b.frame[2..10]);
+        assert_eq!(&request_a.frame[..2], &request_b.frame[..2]);
+        assert_eq!(
+            &request_a.frame[10..request_a.frame.len() - 2],
+            &request_b.frame[10..request_b.frame.len() - 2]
+        );
+        assert_eq!(protocol::crc16(&request_a.frame), 0);
+        assert_eq!(protocol::crc16(&request_b.frame), 0);
+    }
+
+    #[test]
+    fn universal_package_is_refused_by_legacy_sealed_status_before_transfer() {
+        let image = Image::parse(&universal_file()).unwrap();
+        let mut legacy = vec![2, 0, 0, 1, 255, 0, 255, 14];
+        legacy.resize(32, 0);
+        let legacy = AbStatus::decode(&legacy).unwrap();
+        let error = validate_package_for_device(&image, &legacy).unwrap_err();
+        assert!(error.message.contains("requires firmware 3.1 or newer"));
+        assert!(error.message.contains("no update command was sent"));
+
+        let mut universal = vec![3, 0, 0, 1, 255, 0, 255, 14];
+        universal.resize(32, 0);
+        let universal = AbStatus::decode(&universal).unwrap();
+        assert_eq!(
+            validate_package_for_device(&image, &universal).unwrap(),
+            0x0301
+        );
     }
     #[test]
     fn truncated_oversized_and_plaintext_downloads_leave_no_cache() {

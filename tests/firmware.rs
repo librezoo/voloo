@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 use voloo::{
-    firmware::{AbStatus, Image},
+    firmware::{AbStatus, Image, inspect},
     protocol::{self, FrameDecoder, Matched, Uid},
 };
 
@@ -114,4 +114,87 @@ fn sealed_frames_keep_protocol_identity_and_factory_lock_out_of_public_actions()
     exception.extend_from_slice(&uid.0);
     exception.push(4);
     assert_eq!(decoder.push(&protocol::with_crc(exception)).len(), 1);
+}
+
+fn sealed_v1() -> Value {
+    let mut header = vec![0; 48];
+    header[..4].copy_from_slice(b"VSE1");
+    header[4..8].copy_from_slice(&[3, 0, 3, 0]);
+    header[8..12].copy_from_slice(&[2, 0, 2, 0]);
+    header[32] = 1;
+    json!({"format":"voloo-x035-sealed-v1","hardware_version":0x300,"firmware_version":0x300,"third_party_notices":"Monocypher license",
+        "header":header,"cipher_a":vec![0u8;576],"cipher_b":vec![0u8;576],
+        "recipients":[{"uid":"01-02-03-04-05-06-07-08","nonce":vec![0u8;24],"wrapped_key":vec![0u8;32],"tag":vec![0u8;16]}]})
+}
+
+fn sealed_v2() -> Value {
+    let key_id = 0x1234_5678u32;
+    let mut header = vec![0; 48];
+    header[..4].copy_from_slice(b"VSE2");
+    header[4..8].copy_from_slice(&[3, 0, 3, 1]);
+    header[8..12].copy_from_slice(&[2, 0, 2, 0]);
+    header[32] = 1;
+    let mut nonce = key_id.to_le_bytes().to_vec();
+    nonce.extend_from_slice(&[0xA5; 20]);
+    json!({"format":"voloo-x035-sealed-v2","hardware_version":0x300,"firmware_version":0x301,"third_party_notices":"Monocypher license",
+        "header":header,"cipher_a":vec![0u8;576],"cipher_b":vec![0u8;576],
+        "universal":{"key_id":key_id,"nonce":nonce,"wrapped_key":vec![0x5A;32],"tag":vec![0xC3;16]}})
+}
+
+#[test]
+fn sealed_v1_and_universal_v2_packages_validate_distinct_wire_shapes() {
+    assert!(matches!(
+        Image::parse(&serde_json::to_vec(&sealed_v1()).unwrap()).unwrap(),
+        Image::Sealed(_)
+    ));
+    assert!(matches!(
+        Image::parse(&serde_json::to_vec(&sealed_v2()).unwrap()).unwrap(),
+        Image::Sealed(_)
+    ));
+
+    let mut missing = sealed_v2();
+    missing.as_object_mut().unwrap().remove("universal");
+    assert!(Image::parse(&serde_json::to_vec(&missing).unwrap()).is_err());
+
+    let mut mismatch = sealed_v2();
+    mismatch["universal"]["nonce"][0] = json!(0);
+    assert!(Image::parse(&serde_json::to_vec(&mismatch).unwrap()).is_err());
+
+    let mut mixed_v2 = sealed_v2();
+    mixed_v2["recipients"] = json!([]);
+    assert!(Image::parse(&serde_json::to_vec(&mixed_v2).unwrap()).is_err());
+
+    let mut plaintext_v2 = sealed_v2();
+    plaintext_v2["slot_a"] = json!([1, 2, 3]);
+    assert!(Image::parse(&serde_json::to_vec(&plaintext_v2).unwrap()).is_err());
+
+    let mut leaked_envelope_key = sealed_v2();
+    leaked_envelope_key["universal"]["key"] = json!("00");
+    assert!(Image::parse(&serde_json::to_vec(&leaked_envelope_key).unwrap()).is_err());
+
+    let mut leaked_product_key = sealed_v2();
+    leaked_product_key["upgrade_key"] = json!("00");
+    assert!(Image::parse(&serde_json::to_vec(&leaked_product_key).unwrap()).is_err());
+
+    let mut mixed_v1 = sealed_v1();
+    mixed_v1["universal"] = json!({});
+    assert!(Image::parse(&serde_json::to_vec(&mixed_v1).unwrap()).is_err());
+
+    let mut old_version = sealed_v2();
+    old_version["firmware_version"] = json!(0x300);
+    old_version["header"][7] = json!(0);
+    assert!(Image::parse(&serde_json::to_vec(&old_version).unwrap()).is_err());
+
+    let plain = serde_json::to_vec(&bundle(0x301)).unwrap();
+    assert!(inspect(&plain).is_err());
+}
+
+#[test]
+fn status_byte_three_means_universal_key_encrypted_firmware() {
+    let mut state = vec![3, 0, 0, 1, 255, 0, 255, 14];
+    state.resize(32, 0);
+    let status = AbStatus::decode(&state).unwrap();
+    assert!(status.encrypted);
+    assert!(status.universal);
+    assert_eq!(status.protection_flags, 14);
 }
