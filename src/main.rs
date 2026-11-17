@@ -145,9 +145,16 @@ enum FirmwareCmd {
     /// Inspect a distributable firmware package offline; never opens a device.
     Inspect { file: std::path::PathBuf },
     /// Download paired encrypted firmware automatically, or use a local FILE; verify and confirm.
+    ///
+    /// Without a DEVICE: the only connected Voloo, or with several the ones that have an
+    /// update (listed first; asks to confirm in a terminal, or pass --all). Skipped, never
+    /// aborted: up to date, locked, not idle OFF.
     Update {
-        device: String,
+        device: Option<String>,
         file: Option<std::path::PathBuf>,
+        /// Update every connected Voloo that has an update, without asking.
+        #[arg(long, conflicts_with_all = ["device", "file"])]
+        all: bool,
     },
     /// Trial-boot the previous A/B firmware; verify it before confirming rollback.
     Rollback { device: String },
@@ -312,6 +319,137 @@ fn update_notice(ctx: &Ctx, only_uid: Option<&str>) {
         }
     }
 }
+/// Single-device online update (same output as naming the device).
+fn update_one(ctx: &Ctx, client: &Client, device: &str) -> Result<u8, OpError> {
+    if !ctx.json {
+        eprintln!(
+            "Firmware maintenance for {device}: the background process will reconnect and verify the device. Keep USB connected."
+        );
+    }
+    if !client.is_current() {
+        return Err(stale_daemon_error(client));
+    }
+    let value = client.call(
+        "POST",
+        &format!("/v1/devices/{}/firmware", enc(device)),
+        Some(&json!({})),
+    )?;
+    emit(ctx, &value, || {
+        format!(
+            "{} firmware maintenance completed: {} · output OFF · connection verified",
+            value["uid"].as_str().unwrap_or(""),
+            value["identity"]["firmware_version"].as_str().unwrap_or("")
+        )
+    });
+    Ok(0)
+}
+fn stale_daemon_error(client: &Client) -> OpError {
+    OpError::new(
+        ErrorKind::Busy,
+        format!(
+            "The background process is host {} but this CLI is {}; it is busy so it was not restarted, and it would download firmware paired with {}. Wait for device operations to finish, run `voloo daemon stop`, then retry.",
+            client.info.version,
+            env!("CARGO_PKG_VERSION"),
+            client.info.version
+        ),
+    )
+}
+/// Several Voloo connected: list who gets updated and who is skipped (and why), ask once
+/// in a terminal unless `--all`, then update one device at a time. A skipped or failed
+/// device never stops the others; the exit code is 2 when any update failed.
+fn update_many(ctx: &Ctx, client: &Client, all: bool) -> Result<u8, OpError> {
+    use std::io::{BufRead, IsTerminal};
+    if !client.is_current() {
+        return Err(stale_daemon_error(client));
+    }
+    let _ = client.call("POST", "/v1/updates/refresh", None); // current manifest for the plan
+    let rows = client.call("GET", "/v1/devices", None)?;
+    let plan = voloo::firmware::plan_bulk(&rows);
+    let label = |i: &voloo::firmware::BulkItem| {
+        if i.nickname.is_empty() {
+            i.uid.clone()
+        } else {
+            format!("{} ({})", i.uid, i.nickname)
+        }
+    };
+    let ready: Vec<&voloo::firmware::BulkItem> =
+        plan.iter().filter(|i| i.target.is_some()).collect();
+    if !ctx.json {
+        eprintln!("{} Voloo connected:", plan.len());
+        for i in &plan {
+            match (&i.target, &i.skip) {
+                (Some(t), _) => eprintln!("  {}  {} -> {t}", label(i), i.current),
+                (_, Some(why)) => eprintln!("  {}  {}  skipped: {why}", label(i), i.current),
+                _ => {}
+            }
+        }
+    }
+    let mut results: Vec<Value> = plan
+        .iter()
+        .filter(|i| i.target.is_none())
+        .map(|i| json!({"uid": i.uid, "outcome": "skipped", "reason": i.skip}))
+        .collect();
+    let mut failed = false;
+    if !ready.is_empty() {
+        if !all {
+            if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
+                return Err(OpError::new(
+                    ErrorKind::InvalidArgument,
+                    format!(
+                        "{} devices could be updated; pass --all to update them without asking, or name one device",
+                        ready.len()
+                    ),
+                ));
+            }
+            eprint!("Update {} device(s), one at a time? [y/N] ", ready.len());
+            let mut line = String::new();
+            let _ = std::io::stdin().lock().read_line(&mut line);
+            if !matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+                eprintln!("Nothing changed.");
+                return Ok(0);
+            }
+        }
+        for item in &ready {
+            if !ctx.json {
+                eprintln!("Updating {} ...", label(item));
+            }
+            match client.call(
+                "POST",
+                &format!("/v1/devices/{}/firmware", enc(&item.uid)),
+                Some(&json!({})),
+            ) {
+                Ok(v) => {
+                    let now = v["identity"]["firmware_version"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string();
+                    if !ctx.json {
+                        eprintln!("  done: {now}");
+                    }
+                    results.push(json!({"uid": item.uid, "outcome": "updated", "firmware": now}));
+                }
+                Err(e) => {
+                    failed = true;
+                    if !ctx.json {
+                        eprintln!("  failed: {}", e.message);
+                    }
+                    results.push(json!({"uid": item.uid, "outcome": "failed", "error": e.message}));
+                }
+            }
+        }
+    }
+    let value = json!(results);
+    emit(ctx, &value, || {
+        let n = |o: &str| results.iter().filter(|r| r["outcome"] == o).count();
+        format!(
+            "{} updated, {} skipped, {} failed",
+            n("updated"),
+            n("skipped"),
+            n("failed")
+        )
+    });
+    Ok(if failed { 2 } else { 0 })
+}
 fn daemon_client() -> Result<Client, OpError> {
     Client::connect("cli")
 }
@@ -469,7 +607,44 @@ fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
                 FirmwareCmd::Inspect { .. } => unreachable!(),
                 FirmwareCmd::Status { device } => (device, "GET", "", None),
                 FirmwareCmd::Rollback { device } => (device, "POST", "/rollback", Some(json!({}))),
-                FirmwareCmd::Update { device, file: None } => {
+                FirmwareCmd::Update {
+                    device: None,
+                    file: Some(_),
+                    ..
+                } => {
+                    return Err(OpError::new(
+                        ErrorKind::InvalidArgument,
+                        "Name the device (UID or nickname) when updating from a local file",
+                    ));
+                }
+                FirmwareCmd::Update {
+                    device: None,
+                    file: None,
+                    all,
+                } => {
+                    let rows = client.call("GET", "/v1/devices", None)?;
+                    let online: Vec<&Value> = rows
+                        .as_array()
+                        .map(|a| a.iter().filter(|r| r["online"] == true).collect())
+                        .unwrap_or_default();
+                    match online.as_slice() {
+                        [] => {
+                            return Err(OpError::new(
+                                ErrorKind::NotFound,
+                                "No Voloo connected. Check the USB data cable.",
+                            ));
+                        }
+                        [only] if !all => {
+                            return update_one(ctx, &client, only["uid"].as_str().unwrap_or(""));
+                        }
+                        _ => return update_many(ctx, &client, all),
+                    }
+                }
+                FirmwareCmd::Update {
+                    device: Some(device),
+                    file: None,
+                    ..
+                } => {
                     // The background process downloads the firmware paired with *its own*
                     // version, so a stale one would silently install the old package.
                     if !client.is_current() {
@@ -486,8 +661,9 @@ fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
                     (device, "POST", "", Some(json!({})))
                 }
                 FirmwareCmd::Update {
-                    device,
+                    device: Some(device),
                     file: Some(file),
+                    ..
                 } => {
                     use std::io::Read;
                     let source = std::fs::File::open(&file).map_err(|e| {

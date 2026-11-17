@@ -52,6 +52,22 @@ fn initial_delay() -> Duration {
     Duration::from_secs(45 + jitter)
 }
 
+/// Reads the manifest now (blocking), stores it and caches it. Used by the daily thread and
+/// by `voloo firmware update` with several devices so its plan uses current information.
+pub fn refresh_now(manager: &Manager) -> bool {
+    match firmware::fetch_manifest_for_check() {
+        Some(manifest) => {
+            manager.set_update_manifest(manifest.clone());
+            save(&Cache {
+                checked_at: now_s(),
+                manifest,
+            });
+            true
+        }
+        None => false,
+    }
+}
+
 /// Runs in a detached thread for the life of the background process.
 pub fn spawn(manager: Arc<Manager>) {
     if !manager.config.update_check {
@@ -68,12 +84,7 @@ pub fn spawn(manager: Arc<Manager>) {
                 let stale =
                     load().is_none_or(|c| now_s().saturating_sub(c.checked_at) >= MAX_AGE_S);
                 if stale {
-                    if let Some(manifest) = firmware::fetch_manifest_for_check() {
-                        manager.set_update_manifest(manifest.clone());
-                        save(&Cache {
-                            checked_at: now_s(),
-                            manifest,
-                        });
+                    if refresh_now(&manager) {
                     } else if let Some(mut cache) = load() {
                         // Offline: keep the cached answer, retry tomorrow rather than hourly.
                         cache.checked_at = now_s();
