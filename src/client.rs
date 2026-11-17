@@ -117,9 +117,12 @@ impl Client {
             },
             len = payload.len()
         );
+        // One write: a body arriving after the server has already answered and closed
+        // would be answered with a TCP reset that can discard the reply.
+        let mut request = head.into_bytes();
+        request.extend_from_slice(payload.as_bytes());
         stream
-            .write_all(head.as_bytes())
-            .and_then(|_| stream.write_all(payload.as_bytes()))
+            .write_all(&request)
             .map_err(|e| SendError::Broken(e.to_string()))?;
         let mut raw = Vec::new();
         stream

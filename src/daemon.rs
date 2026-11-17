@@ -426,6 +426,9 @@ async fn device_firmware_rollback(
     State(app): State<App>,
     Path(id): Path<String>,
     h: HeaderMap,
+    // Clients may send a `{}` body. Always read it: closing a connection with unread
+    // request bytes makes the OS reset it and the client can lose the reply.
+    _body: axum::body::Bytes,
 ) -> ApiResult {
     Ok(Json(
         app.manager
