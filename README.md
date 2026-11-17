@@ -121,7 +121,7 @@ node --test packaging/npm/publish.test.mjs tests/web.test.mjs
 | `packaging/` | npm and PyPI packaging |
 | `firmware/x035/` | Published firmware manifest and encrypted package |
 
-The product website, posters and brand assets are in [librezoo/voloo-site](https://github.com/librezoo/voloo-site). Other languages integrate through the HTTP API, `--json` or MCP rather than separate
+Other languages integrate through the HTTP API, `--json` or MCP rather than separate
 SDKs. Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
 and versions follow [Semantic Versioning](https://semver.org/).
 
