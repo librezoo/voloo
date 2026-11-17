@@ -1,178 +1,107 @@
-# voloo Host
+# voloo
 
-Local host software for the USB-C voloo Switch. One `voloo` executable talks to
-each Switch over its own USB cable (USB CDC, no driver needed on macOS, Linux or
-Windows 10/11) and offers the same functions as a CLI, an MCP server for AI agents
-a local HTTP API for any language and a web dashboard for every connected voloo.
-See the [中文使用说明](docs/user-guide.md) · [English guide](docs/user-guide.en.md) · [刷写与通用升级教程](docs/firmware-updates.zh.md) · [品牌素材](branding/README.md).
+Control the USB-C **voloo Switch**, a programmable DC power switch, from a command
+line, an AI agent (MCP), a local HTTP API or a web dashboard. One `voloo` program
+talks to every Switch over its own USB cable. No driver is needed on macOS, Linux
+or Windows 10/11.
 
-voloo only switches the externally supplied SOURCE power; it is not a power source.
-**OFF does not mean the load terminals are at zero volts** — use `discharge` to
+voloo only switches externally supplied power; it is not a power source.
+**OFF does not mean the load terminals are at zero volts.** Use `discharge` to
 confirm VOUT ≤ 1 V.
 
-## Product website and quick starts
-
-[中文官网](https://voloo.librezoo.com/) · [English website](https://voloo.librezoo.com/index.en.html) · [中文快速上手](docs/quick-start.md) · [English quick start](docs/quick-start.en.md) · [Posters and downloads](https://voloo.librezoo.com/downloads.html)
-
-Public website and editable promotional sources live in [website/](website/README.md). Individual downloads include Chinese / English posters, long images and two-page A4 guides.
+[Website](https://voloo.librezoo.com/) · [中文使用说明](docs/user-guide.md) · [User guide](docs/user-guide.en.md) · [Reference](docs/reference.md)
 
 ## Install
 
-```sh
-npm install -g @librezoo/voloo # or: npx @librezoo/voloo ls
-pipx install voloo         # or: uvx voloo ls
-```
-
-When upgrading an already running host, wait for device operations to finish,
-run `voloo daemon stop` once, then use the new `voloo ls` to start its replacement.
-This is separate from ordinary firmware updating, which keeps the daemon running.
-
-## Build
+Requires Node.js 18 or newer.
 
 ```sh
-cargo build --release      # target/release/voloo
-cargo test                 # simulated devices only; never touches real hardware
-node packaging/npm/build.mjs && (cd packaging/pypi && uvx maturin==1.15.0 build --release --out ../../dist/pypi)
-sh packaging/check-install.sh
+npm install -g @librezoo/voloo@latest   # or: pipx install voloo
 ```
 
-## How it runs
+To update, run the same command, then restart the background process once so it
+also runs the new version:
 
-A serial port can be open in only one program, so a background process
-(`voloo daemon run`) owns every voloo port. The CLI, `voloo mcp` and HTTP clients
-start it automatically on first use. It listens on 127.0.0.1 only, follows USB
-hot-plug, polls each device (1 Hz, 4 Hz while an event stream is open), and exits
-after 10 minutes without clients. **Starting or stopping it never changes any
-output.** It is not a system service.
+```sh
+voloo daemon stop
+voloo ls
+```
 
-A device that is unplugged or stops answering is shown **offline with an unknown
-output state** — the Switch keeps its last output when communication is lost.
+If npm reports a permission error (EACCES), do not use `sudo`; see the
+[install help](https://voloo.librezoo.com/#start) on the website.
 
-## Commands
+## Quick start
 
-Devices are named by full UID (`CD-AB-05-F3-69-BE-3B-5D`) or by nickname. Read
-commands may omit the device when exactly one voloo is connected; write commands
-always need it.
+```sh
+voloo ls                 # connected devices, state and active faults
+voloo name DEV bench-a   # optional nickname; DEV is a UID or nickname
+voloo on bench-a         # switch on and confirm by reading status back
+voloo discharge bench-a  # switch off and confirm VOUT ≤ 1 V
+voloo ui                 # live web dashboard
+voloo demo               # the dashboard with simulated devices, no hardware
+```
 
-| Command | Effect |
-| --- | --- |
-| `voloo ls` | Connected voloo devices with state and active faults |
-| `voloo status [DEV]` / `info` / `diag --kind communication\|adc\|fast` | Read-only |
-| `voloo on DEV` / `off DEV` / `discharge DEV` | Switch and confirm by status |
-| `voloo cycle DEV [--off-ms 1000] [--no-discharge]` | Discharge (or OFF), wait, ON; stops at the first failure |
-| `voloo firmware status DEV` / `firmware update DEV [FILE]` / `firmware rollback DEV` | Managed USB firmware maintenance and A/B rollback; [details and first-install limits](docs/firmware-updates.md) |
-| `voloo name DEV NICKNAME` | Persistent nickname (≤ 24 UTF-8 bytes); output must be fully OFF |
-| `voloo faults [DEV] [--all]` | Faults with the suggested next step |
-| `voloo log --kind operations\|faults\|trace` / `voloo trace ID` | Logs and serial transactions |
-| `voloo ui` | Web dashboard: all devices live, switch, rename, lock, activity and faults |
-| `voloo demo` | The dashboard with simulated devices; no hardware is touched |
-| `voloo lock DEV` / `voloo unlock DEV` | Refuse every change from any client (kept across restarts) |
-| `voloo doctor` | Checks USB, permissions, devices, measurements and logs, with fixes |
-| `voloo report` | One local file for support: versions, device states, faults, logs (nothing is sent) |
-| `voloo ports` | Serial ports with USB metadata; opens nothing |
-| `voloo mcp` | MCP server on stdio |
-| `voloo api-info` | Local API address and token |
-| `voloo daemon status\|stop` | The background process (outputs are never changed) |
-
-Add `--json` for machine-readable output, `--direct` (or `--port PATH`) to open
-the port without the background process. Exit codes:
-
-| Code | Meaning |
-| ---: | --- |
-| 0 | Completed, or already in the requested state |
-| 2 | The device reported failure (e.g. discharge timeout) |
-| 3 | Outcome unknown, device offline or link failure — read `status` before any further action |
-| 4 | Invalid argument or device not found |
-| 5 | Busy (device busy, port in use, device locked, or nickname change while ON) |
-
-A lost acknowledgement is never answered by resending a power command; the
-outcome is confirmed by reading status or reported as unknown.
-
-## Web dashboard
-
-`voloo ui` opens the dashboard in your browser through a one-time link (valid for
-60 s) that becomes a browser session; the page has no other way in. It shows
-every connected voloo with its state, VIN/VOUT (invalid readings are shown as
-invalid, not 0 V), the last minute of VOUT, the last operation and active faults,
-and updates live. Every switch asks for confirmation and shows the result the
-device confirmed; an unknown outcome is highlighted. `voloo ui --no-open` prints
-the link instead.
-
-The dashboard uses the promo page's paper background, deep-purple outlines,
-enclosure yellow and hard offset shadows. Hold a device's switch (or a button in
-its detail sheet) for 0.6 s to change power; a short press only shows a hint.
-Releasing early, losing focus or hiding the page cancels the hold. Unknown outcomes
-require **Check state**, a fresh device read, before another power action.
-
-English, Simplified Chinese and Traditional Chinese are available from the language
-menu (the first visit follows the browser language). The appearance menu offers
-system, light and dark modes. Both preferences are stored in this browser; the UI
-loads no external fonts or services.
-
-To try it without hardware: `voloo demo` starts a separate background process with
-simulated devices (its own home, USB scanning off) and opens the dashboard.
-
-## USB firmware maintenance
-
-`voloo firmware update DEV` reads the firmware manifest at `voloo.librezoo.com/firmware/x035/`
-(repository mirror as fallback), picks the newest encrypted firmware that fits the device and
-this CLI, verifies its SHA-256, reconnects to the same UID and verifies the result. The dashboard
-offers the same operation under **USB firmware**, plus optional local files and
-rollback. Use a compatible device and the package recommended for it.
-
-The device must already be idle OFF, measurements must be valid and VOUT <= 1 V.
-Keep the daemon running during updating. Read fresh state after an unknown result.
-See [firmware updates](docs/firmware-updates.md) for user instructions and recovery limits.
+Every power command is confirmed by reading the device state. A lost
+acknowledgement is never answered by resending a command; the result is either
+confirmed or reported as unknown. Add `--json` for machine-readable output. See
+the [reference](docs/reference.md) for all commands, exit codes, the HTTP API,
+configuration and logs.
 
 ## AI agents (MCP)
 
-Every MCP client that runs a stdio server works with the same command:
+Any MCP client that runs a stdio server uses the same command:
 
-| Tool | Setup |
+| Client | Setup |
 | --- | --- |
 | Claude Code | `claude mcp add voloo -- voloo mcp` |
 | Codex | `~/.codex/config.toml`: `[mcp_servers.voloo]` `command = "voloo"` `args = ["mcp"]` |
 | Cursor, Windsurf, Cline, VS Code, Gemini CLI, … | `{"command": "voloo", "args": ["mcp"]}` |
 
-Tools: `voloo_list_devices`, `voloo_get_status`, `voloo_power`
-(on/off/discharge/cycle), `voloo_set_nickname`, `voloo_get_log`. Clients that
-speak Streamable HTTP can use `POST http://127.0.0.1:<port>/mcp` with the token
-from `voloo api-info`.
+Tools: `voloo_list_devices`, `voloo_get_status`, `voloo_power` (on, off, discharge,
+cycle), `voloo_set_nickname`, `voloo_get_log`. Set `[mcp] read_only = true` in the
+[configuration](docs/reference.md#configuration) to let agents read but not switch.
+Tested clients are listed in [MCP client compatibility](docs/mcp-client-compatibility.md).
 
-## Other programs (HTTP)
+## Firmware
+
+`voloo firmware update DEV` installs the newest published firmware that fits the
+device and the installed voloo, verifies its checksum and the result, and keeps
+the previous image for `voloo firmware rollback DEV`. The device must be idle
+and OFF with valid measurements and VOUT ≤ 1 V. See
+[firmware updates](docs/firmware-updates.md) for the limits and recovery steps.
+
+## Documentation
+
+| | |
+| --- | --- |
+| [User guide](docs/user-guide.en.md) · [中文](docs/user-guide.md) | Wiring, first use, dashboard, troubleshooting |
+| [Quick start](docs/quick-start.en.md) · [中文](docs/quick-start.md) | Two-page wiring and first-use sheet |
+| [Reference](docs/reference.md) | Commands, exit codes, HTTP API, configuration, logs, how the background process works |
+| [Firmware updates](docs/firmware-updates.md) · [中文](docs/firmware-updates.zh.md) | Updating, rollback, recovery |
+| [Changelog](CHANGELOG.md) · [Release notes](docs/releases/) | What changed in each version |
+| [Security](SECURITY.md) | Reporting vulnerabilities |
+
+## Development
 
 ```sh
-voloo api-info            # url, token, OpenAPI location
-curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:$PORT/v1/devices
-curl -H "Authorization: Bearer $TOKEN" -X POST -d '{"action":"on"}' \
-     -H 'Content-Type: application/json' http://127.0.0.1:$PORT/v1/devices/bench-a/power
-curl -N -H "Authorization: Bearer $TOKEN" http://127.0.0.1:$PORT/v1/events   # live events
+cargo build --release   # target/release/voloo
+cargo test              # simulated devices only; never touches real hardware
+cargo fmt --check && cargo clippy --all-targets -- -D warnings
+node --test packaging/npm/publish.test.mjs tests/web.test.mjs
 ```
 
-The full API is described at `/openapi.json`; generate a client for any language
-from it, or read port and token from `$VOLOO_HOME/daemon.json` (they change when
-the process restarts). Requests must come from 127.0.0.1 with the exact Host
-header; browser requests from other origins are refused.
+| Path | Contents |
+| --- | --- |
+| `src/` | The single Rust implementation: CLI, background process, MCP, HTTP API, serial link, firmware updates |
+| `web/` | The dashboard (static files served by the program) |
+| `tests/` | Integration tests with a simulated device |
+| `packaging/` | npm and PyPI packaging |
+| `firmware/x035/` | Published firmware manifest and encrypted package |
+| `website/`, `branding/` | Product website sources and brand assets |
 
-## Configuration
-
-`$VOLOO_HOME/config.toml` (default `~/.voloo/config.toml`), all optional:
-
-```toml
-idle_exit_s = 600
-[mcp]
-read_only = true                        # agents may read but not switch
-[devices."CD-AB-05-F3-69-BE-3B-5D"]
-locked = true                           # no client may switch this device
-```
-
-## Logs
-
-`$VOLOO_HOME/logs/` holds `operations-*.jsonl` (every write with its source —
-cli, mcp, http — and before/after state, fsynced), `events-*.jsonl` (faults
-raised, occurred and cleared) and `trace-*.jsonl` (one span per serial
-transaction; background polling is traced only at `VOLOO_LOG_LEVEL=trace`).
-Logs are kept for 14 days and 200 MB in total.
+Other languages integrate through the HTTP API, `--json` or MCP rather than separate
+SDKs. Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
+and versions follow [Semantic Versioning](https://semver.org/).
 
 ## License
 
