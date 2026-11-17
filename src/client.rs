@@ -38,7 +38,9 @@ impl Client {
 
     /// Connects, starting the background process if needed.
     pub fn connect(source: &'static str) -> Result<Client, OpError> {
-        if let Some(c) = Client::existing(source) {
+        if let Some(c) = Client::existing(source)
+            && (c.is_current() || !c.replace_if_idle())
+        {
             return Ok(c);
         }
         spawn()?;
@@ -56,6 +58,30 @@ impl Client {
             ErrorKind::LinkError,
             format!("The voloo background process did not start; see {log}"),
         ))
+    }
+
+    /// A background process left over from another host version would download the
+    /// firmware paired with its own version. Ask it to stop; it refuses (409) while any
+    /// device operation is queued or running, in which case the caller keeps using it.
+    /// Returns true once it has exited and a current one may be started.
+    fn replace_if_idle(&self) -> bool {
+        match self.send("POST", "/v1/shutdown/idle", None, Duration::from_secs(5)) {
+            Ok((status, _)) if status < 300 => {}
+            _ => return false,
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            if Client::existing(self.source).is_none() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        false
+    }
+
+    /// True when the background process was built from the same host version as this CLI.
+    pub fn is_current(&self) -> bool {
+        self.info.version == env!("CARGO_PKG_VERSION")
     }
 
     fn healthy(&self) -> bool {

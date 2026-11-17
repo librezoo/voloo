@@ -449,7 +449,22 @@ fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
                 FirmwareCmd::Inspect { .. } => unreachable!(),
                 FirmwareCmd::Status { device } => (device, "GET", "", None),
                 FirmwareCmd::Rollback { device } => (device, "POST", "/rollback", Some(json!({}))),
-                FirmwareCmd::Update { device, file: None } => (device, "POST", "", Some(json!({}))),
+                FirmwareCmd::Update { device, file: None } => {
+                    // The background process downloads the firmware paired with *its own*
+                    // version, so a stale one would silently install the old package.
+                    if !client.is_current() {
+                        return Err(OpError::new(
+                            ErrorKind::Busy,
+                            format!(
+                                "The background process is host {} but this CLI is {}; it is busy so it was not restarted, and it would download firmware paired with {}. Wait for device operations to finish, run `voloo daemon stop`, then retry.",
+                                client.info.version,
+                                env!("CARGO_PKG_VERSION"),
+                                client.info.version
+                            ),
+                        ));
+                    }
+                    (device, "POST", "", Some(json!({})))
+                }
                 FirmwareCmd::Update {
                     device,
                     file: Some(file),
