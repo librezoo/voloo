@@ -1,6 +1,6 @@
 [package]
 name = "voloo"
-version = "0.7.5"
+version = "0.7.6"
 edition = "2024"
 rust-version = "1.89"
 description = "Control the USB-C voloo Switch from a CLI, AI agents (MCP), a local HTTP API or a web dashboard"
