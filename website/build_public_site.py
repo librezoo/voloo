@@ -51,11 +51,14 @@ while pending:
             if not parsed.scheme and not parsed.netloc and parsed.path:
                 pending.append(relative.parent / unquote(parsed.path))
 
+FIRMWARE = HERE.parent / 'firmware/x035'
+firmware_files = {Path('firmware/x035') / p.name for p in FIRMWARE.iterdir() if p.suffix in ('.json', '.voloofw')} if FIRMWARE.is_dir() else set()
+selected |= firmware_files
 existing = {p.relative_to(PUBLIC) for p in PUBLIC.rglob('*') if p.is_file()} if PUBLIC.exists() else set()
 if existing - selected:
     raise ValueError('Unexpected files already exist in public output; refusing to publish them.')
 for relative in selected:
     destination = PUBLIC / relative
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(SOURCE / relative, destination)
+    shutil.copy2((HERE.parent if relative in firmware_files else SOURCE) / relative, destination)
 print(json.dumps({'directory': str(PUBLIC), 'files': [str(p) for p in sorted(selected)]}, ensure_ascii=False))
