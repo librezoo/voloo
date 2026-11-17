@@ -1,22 +1,45 @@
-# voloo
+<h1 align="center">voloo</h1>
 
-Control the USB-C **voloo Switch**, a programmable DC power switch, from a command
-line, an AI agent (MCP), a local HTTP API or a web dashboard. One `voloo` program
-talks to every Switch over its own USB cable. No driver is needed on macOS, Linux
-or Windows 10/11.
+<p align="center"><b>A power switch you can program.</b><br>
+Control the USB-C voloo Switch from a CLI, an AI agent (MCP), a local HTTP API or a web dashboard.</p>
 
-voloo only switches externally supplied power; it is not a power source.
-**OFF does not mean the load terminals are at zero volts.** Use `discharge` to
-confirm VOUT ≤ 1 V.
+<p align="center">
+  <a href="https://github.com/librezoo/voloo/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/librezoo/voloo/ci.yml?branch=main&label=CI&style=flat-square&labelColor=2d1a2b"></a>
+  <a href="https://www.npmjs.com/package/@librezoo/voloo"><img alt="npm" src="https://img.shields.io/npm/v/@librezoo/voloo?label=npm&style=flat-square&labelColor=2d1a2b&color=ffc800"></a>
+  <a href="https://github.com/librezoo/voloo/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/librezoo/voloo?style=flat-square&labelColor=2d1a2b&color=ffc800"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-ffc800?style=flat-square&labelColor=2d1a2b"></a>
+  <img alt="Platforms: macOS, Linux, Windows" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-8f7cd6?style=flat-square&labelColor=2d1a2b">
+  <img alt="Node.js 18 or newer" src="https://img.shields.io/node/v/@librezoo/voloo?style=flat-square&labelColor=2d1a2b&color=8f7cd6">
+  <img alt="MCP server included" src="https://img.shields.io/badge/MCP-server%20included-3fa97c?style=flat-square&labelColor=2d1a2b">
+  <img alt="Rust" src="https://img.shields.io/badge/built%20with-Rust-d4553d?style=flat-square&labelColor=2d1a2b&logo=rust&logoColor=white">
+</p>
 
-[Website](https://voloo.librezoo.com/) · [中文使用说明](docs/user-guide.md) · [User guide](docs/user-guide.en.md) · [Reference](docs/reference.md)
+<p align="center">
+  <img src="docs/assets/product-render.png" alt="The voloo Switch: yellow and purple enclosure, green spring terminals, USB-C port" width="420"><br>
+  <sub>AI-assisted product rendering</sub>
+</p>
+
+One `voloo` program talks to every Switch over its own USB cable. No driver is
+needed on macOS, Linux or Windows 10/11.
+
+> **voloo only switches externally supplied power; it is not a power source.**
+> OFF does not mean the load terminals are at zero volts. Use `discharge` to
+> confirm VOUT ≤ 1 V.
+
+<p align="center">
+  <a href="https://voloo.librezoo.com/">Website</a> ·
+  <a href="docs/user-guide.en.md">User guide</a> ·
+  <a href="docs/user-guide.md">中文使用说明</a> ·
+  <a href="docs/reference.md">Reference</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 ## Install
 
 Requires Node.js 18 or newer.
 
 ```sh
-npm install -g @librezoo/voloo@latest   # or: pipx install voloo
+npm install -g @librezoo/voloo@latest
 ```
 
 To update, run the same command, then restart the background process once so it
@@ -97,9 +120,8 @@ node --test packaging/npm/publish.test.mjs tests/web.test.mjs
 | `tests/` | Integration tests with a simulated device |
 | `packaging/` | npm and PyPI packaging |
 | `firmware/x035/` | Published firmware manifest and encrypted package |
-| `website/`, `branding/` | Product website sources and brand assets |
 
-Other languages integrate through the HTTP API, `--json` or MCP rather than separate
+The product website, posters and brand assets are in [librezoo/voloo-site](https://github.com/librezoo/voloo-site). Other languages integrate through the HTTP API, `--json` or MCP rather than separate
 SDKs. Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
 and versions follow [Semantic Versioning](https://semver.org/).
 
