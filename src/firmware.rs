@@ -1059,9 +1059,32 @@ fn select_entry<'a>(
     }
     Ok(best)
 }
+/// Package addresses must be https on a Voloo-controlled or GitHub host; the manifest
+/// cannot send the host to an arbitrary server (the device would still reject a forged
+/// package, but there is no reason to fetch from elsewhere).
+fn allowed_package_url(url: &str) -> bool {
+    #[cfg(debug_assertions)]
+    if std::env::var_os("VOLOO_FIRMWARE_MANIFEST_URL").is_some()
+        && url.starts_with("http://127.0.0.1:")
+    {
+        return true;
+    }
+    url.strip_prefix("https://")
+        .and_then(|rest| rest.split(['/', '?', '#']).next())
+        .is_some_and(|host| {
+            !host.contains('@')
+                && !host.contains(':')
+                && [
+                    "voloo.librezoo.com",
+                    "github.com",
+                    "objects.githubusercontent.com",
+                ]
+                .contains(&host)
+        })
+}
 fn download_entry(agent: &ureq::Agent, entry: &ManifestEntry) -> Result<Vec<u8>, OpError> {
     let mut last = invalid("The firmware manifest lists no download address");
-    for url in &entry.urls {
+    for url in entry.urls.iter().filter(|u| allowed_package_url(u)) {
         match http_get(agent, url, MAX_FILE) {
             Ok(data) => {
                 let digest = ring::digest::digest(&ring::digest::SHA256, &data);
@@ -1600,6 +1623,25 @@ mod manifest_tests {
         let mut bad = entry("3.3", &["0.2"], "0.7.3");
         bad.code = 0x309;
         assert!(select_entry(&manifest(vec![bad]), "0.2", 0x302).is_err());
+    }
+    #[test]
+    fn package_urls_are_limited_to_known_https_hosts() {
+        assert!(allowed_package_url(
+            "https://voloo.librezoo.com/firmware/x035/a.voloofw"
+        ));
+        assert!(allowed_package_url(
+            "https://github.com/librezoo/voloo/releases/download/v0.7.3/a"
+        ));
+        for bad in [
+            "http://voloo.librezoo.com/a",
+            "https://evil.example/a",
+            "https://voloo.librezoo.com@evil.example/a",
+            "https://voloo.librezoo.com.evil.example/a",
+            "https://voloo.librezoo.com:8443/a",
+            "file:///etc/passwd",
+        ] {
+            assert!(!allowed_package_url(bad), "{bad}");
+        }
     }
     #[test]
     fn host_version_comparison_is_numeric() {
