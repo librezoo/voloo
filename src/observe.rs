@@ -93,10 +93,11 @@ pub enum FaultCode {
     LinkNoResponse,
     LinkIdentityMismatch,
     LinkIo,
+    LinkUnstable,
     HostLogWriteFailed,
 }
 impl FaultCode {
-    pub const ALL: [FaultCode; 17] = [
+    pub const ALL: [FaultCode; 18] = [
         Self::DevDischargeTimeout,
         Self::DevMeasurementInvalid,
         Self::DevInternalError,
@@ -113,6 +114,7 @@ impl FaultCode {
         Self::LinkNoResponse,
         Self::LinkIdentityMismatch,
         Self::LinkIo,
+        Self::LinkUnstable,
         Self::HostLogWriteFailed,
     ];
     pub fn parse(s: &str) -> Option<Self> {
@@ -136,6 +138,7 @@ impl FaultCode {
             Self::LinkNoResponse => "LINK_NO_RESPONSE",
             Self::LinkIdentityMismatch => "LINK_IDENTITY_MISMATCH",
             Self::LinkIo => "LINK_IO",
+            Self::LinkUnstable => "LINK_UNSTABLE",
             Self::HostLogWriteFailed => "HOST_LOG_WRITE_FAILED",
         }
     }
@@ -230,6 +233,9 @@ impl FaultCode {
             }
             Self::LinkIo => {
                 "Serial I/O failed. Reconnect the device and read status before acting."
+            }
+            Self::LinkUnstable => {
+                "The USB connection keeps dropping. Push the USB-C plug in fully, use a short data-capable cable (not a charge-only one), plug straight into the computer or a powered hub, and try another port. Ignore this if you are moving the board on purpose."
             }
             Self::HostLogWriteFailed => {
                 "Logs could not be written. Check free space and permissions of the Voloo home directory."
@@ -371,6 +377,21 @@ struct Inner {
     faults: BTreeMap<(String, FaultCode), Fault>,
     pending_trace: Vec<String>,
     log_failed: bool,
+    /// When each device's USB link dropped or the device restarted (last 10 minutes).
+    drops: BTreeMap<String, VecDeque<std::time::Instant>>,
+}
+
+/// Number of separate episodes in `times` (ascending): gaps of at most `gap` merge.
+fn count_episodes(times: &[std::time::Instant], gap: Duration) -> usize {
+    let mut episodes = 0;
+    let mut last: Option<std::time::Instant> = None;
+    for t in times {
+        if last.is_none_or(|l| t.duration_since(l) > gap) {
+            episodes += 1;
+        }
+        last = Some(*t);
+    }
+    episodes
 }
 
 /// Thread-safe sink shared by all devices in one process.
@@ -381,6 +402,8 @@ pub struct Recorder {
     pub level: Level,
     dir: Option<PathBuf>,
     limits: Limits,
+    /// Drops closer together than this count as one episode (one unplug also resets).
+    drop_gap: Duration,
     inner: Mutex<Inner>,
     listener: Mutex<Option<Listener>>,
 }
@@ -452,8 +475,10 @@ impl Recorder {
                 faults: BTreeMap::new(),
                 pending_trace: Vec::new(),
                 log_failed: false,
+                drops: BTreeMap::new(),
             }),
             limits,
+            drop_gap: Duration::from_secs(15),
             listener: Mutex::new(None),
         }
     }
@@ -508,6 +533,7 @@ impl Recorder {
     ) -> Fault {
         let at = now();
         let key = (uid.clone().or(port.clone()).unwrap_or_default(), code);
+        let drop_key = key.0.clone();
         let mut inner = self.inner.lock().unwrap();
         let message = message.into();
         let condition = code.is_condition();
@@ -554,7 +580,40 @@ impl Recorder {
                 &fault,
             );
         }
+        // A cable that is not seated drops again and again: after three separate drops in
+        // ten minutes say so, with practical advice. Replugging once is not a problem.
+        if (code == FaultCode::DevResetDetected || (code == FaultCode::LinkUnplugged && fresh))
+            && let Some(n) = self.note_drop(&drop_key)
+        {
+            self.raise(
+                FaultCode::LinkUnstable,
+                fault.uid.clone(),
+                fault.port.clone(),
+                format!("the USB connection dropped {n} times in the last 10 minutes"),
+                None,
+                Value::Null,
+            );
+        }
         fault
+    }
+    /// Records a drop; returns the number of separate episodes when it reaches three.
+    fn note_drop(&self, key: &str) -> Option<usize> {
+        let now = std::time::Instant::now();
+        let mut inner = self.inner.lock().unwrap();
+        let times = inner.drops.entry(key.to_string()).or_default();
+        times.push_back(now);
+        while times
+            .front()
+            .is_some_and(|t| now.duration_since(*t) > Duration::from_secs(600))
+        {
+            times.pop_front();
+        }
+        let episodes = count_episodes(times.make_contiguous(), self.drop_gap);
+        (episodes >= 3).then_some(episodes)
+    }
+    /// After a firmware update or rollback the restarts were expected: forget them.
+    pub fn forget_drops(&self, key: &str) {
+        self.inner.lock().unwrap().drops.remove(key);
     }
     /// Marks a fault inactive when its condition is no longer observed.
     pub fn clear(&self, code: FaultCode, key: &str) -> Option<Fault> {
@@ -722,4 +781,63 @@ pub fn read_log(dir: &Path, stem: &str, uid: Option<&str>, limit: usize) -> Vec<
         }
     }
     out.into()
+}
+
+#[cfg(test)]
+mod drop_tests {
+    use super::*;
+    fn reset(r: &Recorder) {
+        std::thread::sleep(Duration::from_millis(2));
+        r.raise(
+            FaultCode::DevResetDetected,
+            Some("UID".into()),
+            None,
+            "restart",
+            None,
+            Value::Null,
+        );
+    }
+    fn unstable(r: &Recorder) -> bool {
+        r.relevant("UID", Duration::from_secs(600))
+            .iter()
+            .any(|f| f.code == FaultCode::LinkUnstable)
+    }
+    #[test]
+    fn three_separate_drops_raise_one_advice_and_two_do_not() {
+        let mut r = Recorder::memory(Level::Info);
+        r.drop_gap = Duration::from_millis(1);
+        reset(&r);
+        reset(&r);
+        assert!(!unstable(&r), "two replugs are normal");
+        reset(&r);
+        assert!(unstable(&r));
+        let advice = r
+            .relevant("UID", Duration::from_secs(600))
+            .into_iter()
+            .find(|f| f.code == FaultCode::LinkUnstable)
+            .unwrap();
+        assert!(advice.suggestion.contains("Push the USB-C plug in fully"));
+        assert!(advice.message.contains("3 times"));
+    }
+    #[test]
+    fn a_single_unplug_and_its_reset_are_one_episode() {
+        let r = Recorder::memory(Level::Info); // default 15 s gap
+        for _ in 0..4 {
+            reset(&r);
+        }
+        assert!(
+            !unstable(&r),
+            "drops within 15 s of each other are one episode"
+        );
+    }
+    #[test]
+    fn expected_restarts_can_be_forgotten() {
+        let mut r = Recorder::memory(Level::Info);
+        r.drop_gap = Duration::from_millis(1);
+        reset(&r);
+        reset(&r);
+        r.forget_drops("UID");
+        reset(&r);
+        assert!(!unstable(&r));
+    }
 }

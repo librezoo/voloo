@@ -45,6 +45,7 @@ const FAULT = localized({
   LINK_NO_RESPONSE: 'Not responding',
   LINK_IDENTITY_MISMATCH: 'Identity mismatch',
   LINK_IO: 'Connection error',
+  LINK_UNSTABLE: 'Unstable USB connection',
   HOST_LOG_WRITE_FAILED: "Can't write logs",
 });
 const SOURCE = localized({ ui: 'Web', cli: 'Terminal', mcp: 'AI agent', http: 'API', daemon: 'voloo' });

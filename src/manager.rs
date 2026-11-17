@@ -833,15 +833,23 @@ impl Worker {
     fn handle(&self, device: &mut Device, req: Request, latencies: &mut VecDeque<u64>) {
         let m = &self.manager;
         let maintenance = req.job.maintenance();
-        struct UpdateGuard(Option<Arc<AtomicBool>>);
+        struct UpdateGuard(Option<(Arc<AtomicBool>, Arc<Recorder>, String)>);
         impl Drop for UpdateGuard {
             fn drop(&mut self) {
-                if let Some(flag) = self.0.take() {
+                if let Some((flag, recorder, uid)) = self.0.take() {
                     flag.store(false, Ordering::SeqCst);
+                    // The restarts of an update or rollback were expected.
+                    recorder.forget_drops(&uid);
                 }
             }
         }
-        let guard = UpdateGuard(maintenance.then(|| self.updating.clone()));
+        let guard = UpdateGuard(maintenance.then(|| {
+            (
+                self.updating.clone(),
+                m.recorder.clone(),
+                self.uid.to_string(),
+            )
+        }));
         let action = req.job.action();
         let writes = req.job.writes();
         if writes && let Some(source) = m.lock_source(&self.uid) {

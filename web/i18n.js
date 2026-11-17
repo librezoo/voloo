@@ -564,6 +564,14 @@ const messages = {
     "设备身份不匹配",
     "裝置身分不符"
   ],
+  "Unstable USB connection": [
+    "USB 连接不稳定",
+    "USB 連線不穩定"
+  ],
+  "The USB connection keeps dropping. Push the USB-C plug in fully, use a short data-capable cable (not a charge-only one), plug straight into the computer or a powered hub, and try another port. Ignore this if you are moving the board on purpose.": [
+    "USB 连接反复断开。请把 USB-C 插头完全插紧，换一根短的、支持数据传输的线（不要用只能充电的线），直接插到电脑或带供电的集线器上，并换一个接口试试。如果是你有意在挪动板子，可以忽略。",
+    "USB 連線反覆中斷。請把 USB-C 插頭完全插緊，換一條短的、支援資料傳輸的線（不要用只能充電的線），直接插到電腦或有供電的集線器上，並換一個連接埠試試。若是你有意在移動板子，可以忽略。"
+  ],
   "Connection error": [
     "连接错误",
     "連線錯誤"
