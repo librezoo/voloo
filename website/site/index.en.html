@@ -452,7 +452,7 @@ section { position: relative; padding-block: clamp(72px, 10vw, 140px); }
 <span class="eyebrow"> Agent-native Hardware · Power switch </span>
 <h1><span class="title-line">A power switch</span><span class="title-line">you can <span class="hl">program.</span></span></h1>
 <p class="lede"> Switch, discharge or power-cycle your device from your computer, scripts or AI agent. Connect a DC supply to IN, the device to OUT and your computer over USB-C. voloo checks each result. </p>
-<div class="install hero-install"><code id="heroCmd">npm install -g @librezoo/voloo</code><button aria-label="Copy npm install command" data-copy="npm install -g @librezoo/voloo" type="button"> Copy </button></div>
+<div class="install hero-install"><code id="heroCmd">npm install -g @librezoo/voloo@latest</code><button aria-label="Copy npm install command" data-copy="npm install -g @librezoo/voloo@latest" type="button"> Copy </button></div>
 <div class="hero-cta">
 <a class="btn" href="https://github.com/librezoo/voloo" rel="noopener" target="_blank"> Source code ↗ </a>
 <a class="btn primary" href="#bench"> Try the demo → </a>
@@ -774,10 +774,13 @@ on completed, state: on, VOUT 4.98 V</div>
 </div>
 <button aria-controls="install-help" aria-expanded="false" aria-label="Install permission problem?" class="help-btn" data-help-for="npm" title="Install permission problem?" type="button">?</button>
 </div>
-<div aria-labelledby="tab-npm" class="code" data-panel="npm" id="panel-npm" role="tabpanel"><button class="copy" data-copy="npm install -g @librezoo/voloo" type="button"> Copy </button><pre><span class="c"> # Node 18+ · Install voloo </span>
-<span class="p">$</span> npm install -g @librezoo/voloo
+<div aria-labelledby="tab-npm" class="code" data-panel="npm" id="panel-npm" role="tabpanel"><button class="copy" data-copy="npm install -g @librezoo/voloo@latest" type="button"> Copy </button><pre><span class="c"> # Node 18+ · Install or update to the latest version </span>
+<span class="p">$</span> npm install -g @librezoo/voloo@latest
+<span class="c"> # Already installed? After updating, restart the background process </span>
+<span class="p">$</span> voloo daemon stop
+<span class="p">$</span> voloo ls
 <span class="c"> # Or run without installing </span>
-<span class="p">$</span> npx @librezoo/voloo ls</pre></div>
+<span class="p">$</span> npx @librezoo/voloo@latest ls</pre></div>
 <div aria-labelledby="tab-demo" class="code" data-panel="demo" hidden="" id="panel-demo" role="tabpanel"><button class="copy" data-copy="voloo demo" type="button"> Copy </button><pre><span class="c"> # Explore the dashboard with simulated devices </span>
 <span class="p">$</span> voloo demo</pre></div>
 <div class="install-help" hidden="" id="install-help">

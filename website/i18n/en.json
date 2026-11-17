@@ -352,5 +352,7 @@
   "运行": "Run",
   "，确认该目录下的": " and check that the",
   "在 PATH 里。Windows 重新打开终端即可。": "folder in that directory is on your PATH. On Windows, reopen the terminal.",
-  "安装遇到权限问题？": "Install permission problem?"
+  "安装遇到权限问题？": "Install permission problem?",
+  "# Node 18+ · 安装或更新到最新版": "# Node 18+ · Install or update to the latest version",
+  "# 已装过旧版？更新后重启后台程序": "# Already installed? After updating, restart the background process"
 }

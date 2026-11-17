@@ -62,7 +62,7 @@ The device uses system USB CDC drivers; no vendor-specific driver is required. S
 
 | With | Command |
 | --- | --- |
-| npm (Node 18+) | `npm install -g @librezoo/voloo` — or run without installing: `npx @librezoo/voloo ls` |
+| npm (Node 18+) | `npm install -g @librezoo/voloo@latest` (run it again to update, then `voloo daemon stop` and `voloo ls` to restart the background process) — or run without installing: `npx @librezoo/voloo@latest ls` |
 | A downloaded binary | put `voloo` (`voloo.exe`) on your `PATH` |
 
 On Linux, add yourself to the serial group once and log in again:

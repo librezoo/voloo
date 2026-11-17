@@ -442,7 +442,7 @@ section { position: relative; padding-block: clamp(72px, 10vw, 140px); }
 <span class="eyebrow">Agent-native Hardware · 电源开关</span>
 <h1><span class="title-line">给设备一个</span><span class="title-line">能<span class="hl">编程</span>的</span><span class="title-line">电源开关</span></h1>
 <p class="lede">直流电源接 IN，设备接 OUT，USB-C 接电脑。开关、主动泄放和断电重启，交给电脑、脚本或 AI Agent；每一步都读回确认。</p>
-<div class="install hero-install"><code id="heroCmd">npm install -g @librezoo/voloo</code><button aria-label="复制 npm 安装命令" data-copy="npm install -g @librezoo/voloo" type="button">复制</button></div>
+<div class="install hero-install"><code id="heroCmd">npm install -g @librezoo/voloo@latest</code><button aria-label="复制 npm 安装命令" data-copy="npm install -g @librezoo/voloo@latest" type="button">复制</button></div>
 <div class="hero-cta">
 <a class="btn" href="https://github.com/librezoo/voloo" rel="noopener" target="_blank">开源链接 ↗</a>
 <a class="btn primary" href="#bench">模拟试玩 →</a>
@@ -764,10 +764,13 @@ on completed, state: on, VOUT 4.98 V</div>
 </div>
 <button aria-controls="install-help" aria-expanded="false" aria-label="安装遇到权限问题？" class="help-btn" data-help-for="npm" title="安装遇到权限问题？" type="button">?</button>
 </div>
-<div aria-labelledby="tab-npm" class="code" data-panel="npm" id="panel-npm" role="tabpanel"><button class="copy" data-copy="npm install -g @librezoo/voloo" type="button">复制</button><pre><span class="c"># Node 18+ · 安装 voloo</span>
-<span class="p">$</span> npm install -g @librezoo/voloo
+<div aria-labelledby="tab-npm" class="code" data-panel="npm" id="panel-npm" role="tabpanel"><button class="copy" data-copy="npm install -g @librezoo/voloo@latest" type="button">复制</button><pre><span class="c"># Node 18+ · 安装或更新到最新版</span>
+<span class="p">$</span> npm install -g @librezoo/voloo@latest
+<span class="c"># 已装过旧版？更新后重启后台程序</span>
+<span class="p">$</span> voloo daemon stop
+<span class="p">$</span> voloo ls
 <span class="c"># 或者不安装，直接运行</span>
-<span class="p">$</span> npx @librezoo/voloo ls</pre></div>
+<span class="p">$</span> npx @librezoo/voloo@latest ls</pre></div>
 <div aria-labelledby="tab-demo" class="code" data-panel="demo" hidden="" id="panel-demo" role="tabpanel"><button class="copy" data-copy="voloo demo" type="button">复制</button><pre><span class="c"># 没有硬件也能看仪表盘，设备是模拟的</span>
 <span class="p">$</span> voloo demo</pre></div>
 <div class="install-help" hidden="" id="install-help">
