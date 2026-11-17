@@ -1629,3 +1629,97 @@ fn rollback_reply_survives_a_late_request_body() {
         );
     }
 }
+
+/// Serves `body` as the firmware manifest on a loopback port for the life of the test.
+fn serve_manifest(body: String) -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!(
+        "http://127.0.0.1:{}/manifest.json",
+        listener.local_addr().unwrap().port()
+    );
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut stream = stream;
+            let mut buf = [0u8; 2048];
+            let _ = stream.read(&mut buf);
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+        }
+    });
+    url
+}
+fn newer_manifest(rig: &Rig) -> (String, String) {
+    let (_, info) = rig.run(&["info", UID_A]);
+    let hardware = info["hardware_version"].as_str().unwrap().to_string();
+    let (a, b) = info["firmware_version"]
+        .as_str()
+        .unwrap()
+        .split_once('.')
+        .unwrap();
+    let next = format!("{a}.{}", b.parse::<u16>().unwrap() + 1);
+    let code = (a.parse::<u16>().unwrap() << 8) | (b.parse::<u16>().unwrap() + 1);
+    let manifest = json!({"schema":1,"product":"voloo-switch-x035","firmware":[{
+        "version": next, "code": code, "sha256": "0".repeat(64), "size": 1,
+        "urls": ["https://voloo.librezoo.com/firmware/x035/x.voloofw"],
+        "hardware": [hardware], "min_host": "0.0.1"}]});
+    (manifest.to_string(), next)
+}
+
+#[test]
+fn background_update_check_marks_devices_that_could_be_updated() {
+    let mut rig = Rig::new("check_updates = true\n", 600);
+    rig.ready();
+    let (manifest, next) = newer_manifest(&rig);
+    let url = serve_manifest(manifest);
+    rig.run(&["daemon", "stop"]);
+    rig.env.push(("VOLOO_FIRMWARE_MANIFEST_URL".into(), url));
+    rig.env
+        .push(("VOLOO_UPDATE_CHECK_DELAY_MS".into(), "50".into()));
+    rig.run(&["ls"]);
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let (_, rows) = rig.http("GET", "/v1/devices", None);
+        let row = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["uid"] == UID_A)
+            .unwrap()
+            .clone();
+        if row["firmware_update_available"] == json!(next) {
+            assert!(
+                rig.home().join("update-check.json").exists(),
+                "answer is cached for a day"
+            );
+            return;
+        }
+        assert!(Instant::now() < deadline, "no update marker: {row}");
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+#[test]
+fn update_check_is_off_unless_scanning_usb_or_enabled() {
+    let mut rig = Rig::new("", 600);
+    rig.ready();
+    let (manifest, _) = newer_manifest(&rig);
+    let url = serve_manifest(manifest);
+    rig.run(&["daemon", "stop"]);
+    rig.env.push(("VOLOO_FIRMWARE_MANIFEST_URL".into(), url));
+    rig.env
+        .push(("VOLOO_UPDATE_CHECK_DELAY_MS".into(), "50".into()));
+    rig.run(&["ls"]);
+    std::thread::sleep(Duration::from_millis(1500));
+    let (_, rows) = rig.http("GET", "/v1/devices", None);
+    assert!(
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .all(|d| d.get("firmware_update_available").is_none())
+    );
+    assert!(!rig.home().join("update-check.json").exists());
+}

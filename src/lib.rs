@@ -16,3 +16,4 @@ pub mod observe;
 pub mod protocol;
 pub mod report;
 pub mod sim;
+pub mod updatecheck;

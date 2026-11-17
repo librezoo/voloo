@@ -292,6 +292,22 @@ fn emit(ctx: &Ctx, value: &Value, human: impl FnOnce() -> String) {
     }
 }
 
+/// After a human-readable ls/status/info in a terminal: say once per device and version
+/// that newer firmware exists. Never in JSON/MCP/pipes, never blocks, never fails the command.
+fn update_notice(ctx: &Ctx, only_uid: Option<&str>) {
+    use std::io::IsTerminal;
+    if ctx.json || !matches!(ctx.backend, Backend::Daemon) || !std::io::stderr().is_terminal() {
+        return;
+    }
+    let Some(client) = Client::existing("cli") else {
+        return;
+    };
+    if let Ok(rows) = client.call("GET", "/v1/devices", None) {
+        for line in voloo::updatecheck::notices(&rows, only_uid) {
+            eprintln!("{line}");
+        }
+    }
+}
 fn daemon_client() -> Result<Client, OpError> {
     Client::connect("cli")
 }
@@ -565,6 +581,7 @@ fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
                     .collect::<Vec<_>>()
                     .join("\n")
             });
+            update_notice(ctx, None);
         }
         Cmd::Status { device } => {
             let r = device_op(ctx, device.as_deref(), Op::Status)?;
@@ -577,6 +594,7 @@ fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
                     fault_lines(&r["faults"])
                 )
             });
+            update_notice(ctx, r["uid"].as_str());
         }
         Cmd::Info { device } => {
             let r = device_op(ctx, device.as_deref(), Op::Info)?;
@@ -595,6 +613,7 @@ fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
                     r["capabilities"].as_u64().unwrap_or(0)
                 )
             });
+            update_notice(ctx, r["uid"].as_str());
         }
         Cmd::Diag { device, kind } => {
             let r = device_op(ctx, device.as_deref(), Op::Diag(kind))?;

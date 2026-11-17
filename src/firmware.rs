@@ -949,14 +949,14 @@ impl Downloaded {
 const MANIFEST_PRODUCT: &str = "voloo-switch-x035";
 const MAX_MANIFEST: usize = 64 * 1024;
 
-#[derive(Debug, Deserialize)]
-struct Manifest {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Manifest {
     schema: u32,
     product: String,
     firmware: Vec<ManifestEntry>,
 }
-#[derive(Debug, Deserialize)]
-struct ManifestEntry {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ManifestEntry {
     version: String,
     code: u16,
     sha256: String,
@@ -977,12 +977,15 @@ fn manifest_urls() -> Vec<String> {
     ]
 }
 fn http_agent() -> ureq::Agent {
+    http_agent_with(Duration::from_secs(30))
+}
+fn http_agent_with(timeout: Duration) -> ureq::Agent {
     ureq::Agent::config_builder()
         .https_only(
             !cfg!(debug_assertions) || std::env::var_os("VOLOO_FIRMWARE_MANIFEST_URL").is_none(),
         )
         .max_redirects(5)
-        .timeout_global(Some(Duration::from_secs(30)))
+        .timeout_global(Some(timeout))
         .build()
         .into()
 }
@@ -1010,6 +1013,18 @@ fn load_manifest(agent: &ureq::Agent) -> Option<Manifest> {
         let manifest: Manifest = serde_json::from_slice(&data).ok()?;
         (manifest.schema == 1 && manifest.product == MANIFEST_PRODUCT).then_some(manifest)
     })
+}
+
+/// Background update check: the manifest from the first reachable source, short timeout.
+pub fn fetch_manifest_for_check() -> Option<Manifest> {
+    load_manifest(&http_agent_with(Duration::from_secs(8)))
+}
+/// The firmware version (e.g. "3.4") this device could be updated to by `voloo firmware
+/// update`, or `None` when it already runs the newest one it can use.
+pub fn update_available(manifest: &Manifest, hardware: &str, firmware: &str) -> Option<String> {
+    let current = version_code(firmware)?;
+    let entry = select_entry(manifest, hardware, current).ok()?;
+    (entry.code > current).then(|| entry.version.clone())
 }
 fn version_code(text: &str) -> Option<u16> {
     let (a, b) = text.split_once('.')?;

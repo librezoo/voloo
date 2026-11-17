@@ -5,6 +5,7 @@
 //! poll_ms = 250              # status polling while someone watches (web page, SSE)
 //! idle_poll_ms = 1000        # status polling otherwise (detects unplug and faults)
 //! scan_usb = true            # false: use only [[ports]] below (VOLOO_SCAN_USB=0 too)
+//! check_updates = true       # false: never look for newer firmware (VOLOO_NO_UPDATE_CHECK=1 too)
 //!
 //! [mcp]
 //! read_only = false          # true: MCP tools cannot switch or rename
@@ -32,6 +33,7 @@ struct File {
     poll_ms: Option<u64>,
     idle_poll_ms: Option<u64>,
     scan_usb: Option<bool>,
+    check_updates: Option<bool>,
     #[serde(default)]
     mcp: McpFile,
     #[serde(default)]
@@ -66,6 +68,9 @@ pub struct Config {
     /// Enumerate USB serial ports. Off: only configured ports (tests, unusual setups).
     pub scan_usb: bool,
     pub mcp_read_only: bool,
+    /// Once a day at most, read the public firmware manifest and mark devices that could
+    /// be updated. Off by default for demo/test setups that do not scan USB.
+    pub update_check: bool,
     pub locked: BTreeSet<Uid>,
     pub static_ports: Vec<(String, Uid)>,
     /// In-process demo devices (`VOLOO_DEMO=N`, set by `voloo demo`); never real hardware.
@@ -79,6 +84,7 @@ impl Default for Config {
             idle_poll: Duration::from_millis(1000),
             scan_usb: true,
             mcp_read_only: false,
+            update_check: true,
             locked: BTreeSet::new(),
             static_ports: Vec::new(),
             demo: Vec::new(),
@@ -90,6 +96,7 @@ impl Config {
     /// Reads the config file (if any) and `VOLOO_PORTS`. Errors name the problem.
     pub fn load() -> Result<Config, String> {
         let mut config = Config::default();
+        let mut explicit_update_check = None;
         if let Some(path) = home::dir().map(|d| d.join("config.toml"))
             && let Ok(text) = std::fs::read_to_string(&path)
         {
@@ -107,6 +114,7 @@ impl Config {
             if let Some(b) = file.scan_usb {
                 config.scan_usb = b;
             }
+            explicit_update_check = file.check_updates;
             config.mcp_read_only = file.mcp.read_only;
             for (uid, d) in file.devices {
                 let uid: Uid = uid
@@ -151,6 +159,15 @@ impl Config {
             .and_then(|s| s.parse().ok())
         {
             config.idle_exit = Duration::from_secs(s);
+        }
+        config.update_check = match explicit_update_check {
+            Some(b) => b,
+            None => config.scan_usb && config.demo.is_empty(),
+        };
+        if std::env::var("VOLOO_NO_UPDATE_CHECK")
+            .is_ok_and(|v| !matches!(v.as_str(), "" | "0" | "false" | "no" | "off"))
+        {
+            config.update_check = false;
         }
         Ok(config)
     }
