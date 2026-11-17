@@ -28,11 +28,16 @@ img{display:block;max-width:100%;height:auto;margin:24px auto 0;border-radius:14
 </ul>
 <h2 id="1-安装和无硬件体验">1 安装和无硬件体验</h2>
 <p>支持 macOS 11 及以上、Linux、Windows 10/11。请先安装 Node.js 18 或更新版本，再在终端执行：</p>
-<pre><code class="language-sh">npm install -g @librezoo/voloo
+<pre><code class="language-sh">npm install -g @librezoo/voloo@latest
 voloo --version
 </code></pre>
+<p>已经装过旧版？用同一条命令更新到最新版，然后重启后台程序，让它也换成新版本：</p>
+<pre><code class="language-sh">npm install -g @librezoo/voloo@latest
+voloo daemon stop
+voloo ls
+</code></pre>
 <p>安装后，命令名是 <code>voloo</code>。不想全局安装时，也可以用以下方式运行一次：</p>
-<pre><code class="language-sh">npx @librezoo/voloo ls
+<pre><code class="language-sh">npx @librezoo/voloo@latest ls
 </code></pre>
 <p>没有硬件也能先体验仪表盘：</p>
 <pre><code class="language-sh">voloo demo

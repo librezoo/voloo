@@ -21,14 +21,22 @@ voloo 是一个由电脑控制的直流电源开关。把它接在独立直流�
 支持 macOS 11 及以上、Linux、Windows 10/11。请先安装 Node.js 18 或更新版本，再在终端执行：
 
 ```sh
-npm install -g @librezoo/voloo
+npm install -g @librezoo/voloo@latest
 voloo --version
+```
+
+已经装过旧版？用同一条命令更新到最新版，然后重启后台程序，让它也换成新版本：
+
+```sh
+npm install -g @librezoo/voloo@latest
+voloo daemon stop
+voloo ls
 ```
 
 安装后，命令名是 `voloo`。不想全局安装时，也可以用以下方式运行一次：
 
 ```sh
-npx @librezoo/voloo ls
+npx @librezoo/voloo@latest ls
 ```
 
 没有硬件也能先体验仪表盘：
