@@ -21,7 +21,6 @@
   "免装专用驱动": "No vendor driver needed",
   "执行结果，读回确认": "Check the result of every command",
   "多台设备，按名字控制": "Control each device by name",
-  "上位机 Apache-2.0": "Host software: Apache-2.0",
   "在线台架 · 模拟设备": "Try voloo · Interactive demo",
   "按住开关，或者直接敲命令": "Hold the switch. Or type a command.",
   "下面是一台模拟的 voloo，连接 12 V 电源和带输出电容的设备。看看普通 OFF 和主动泄放的区别：OFF 只是断开，电容里的电会慢慢漏；discharge 会把 VOUT 拉到 1 V 以下并确认。": "Try a simulated voloo connected to a 12 V supply. Switching OFF disconnects the supply, but charge can remain in the device's capacitors. Discharge drains that charge and checks that VOUT is at or below 1 V.",
@@ -162,7 +161,6 @@
   "确认接线、限流和目标后，使用": "Confirm wiring, current limits and the target. Then use",
   "或": "or",
   "；也可运行": "; or open",
-  "· LibreZoo · 上位机 Apache-2.0": "· LibreZoo · Host software: Apache-2.0",
   "voloo 只切换你提供的电源，本身不是电源。OFF 不等于 0 V。": "voloo switches power from an external DC supply. It does not generate power, and OFF does not mean 0 V.",
   "voloo：用一根 USB-C 线，让电脑、脚本和 AI Agent 控制设备的供电。开、关、主动泄放、断电重启，每一步都读回确认。": "voloo puts device power under computer, script and AI agent control over USB-C. Switch, discharge and power-cycle with read-back confirmation at every step.",
   "librezoo · voloo 首页": "librezoo · voloo home",
@@ -354,5 +352,6 @@
   "在 PATH 里。Windows 重新打开终端即可。": "folder in that directory is on your PATH. On Windows, reopen the terminal.",
   "安装遇到权限问题？": "Install permission problem?",
   "# Node 18+ · 安装或更新到最新版": "# Node 18+ · Install or update to the latest version",
-  "# 已装过旧版？更新后重启后台程序": "# Already installed? After updating, restart the background process"
+  "# 已装过旧版？更新后重启后台程序": "# Already installed? After updating, restart the background process",
+  "开源 Apache-2.0": "Open source: Apache-2.0"
 }
