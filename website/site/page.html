@@ -342,6 +342,18 @@ section { position: relative; padding-block: clamp(72px, 10vw, 140px); }
 .tabs button { border: 2px solid var(--ink); background: var(--sheet); border-radius: 999px; padding: 8px 16px; font-weight: 700; cursor: pointer; }
 .tabs button[aria-selected="true"] { background: var(--ink); color: var(--ground); }
 @media (max-width: 480px) { .tabs { gap: 6px; } .tabs button { font-size: 14px; padding: 8px 12px; min-height: 44px; } }
+.tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.help-btn { flex: none; width: 36px; height: 36px; border: 2px solid var(--ink); background: var(--sheet); color: var(--ink); border-radius: 50%; font: 800 17px/1 var(--mono); cursor: pointer; padding: 0; }
+.help-btn:hover, .help-btn[aria-expanded="true"] { background: var(--ink); color: var(--ground); }
+.help-btn[hidden] { display: none; }
+@media (max-width: 480px) { .help-btn { width: 44px; height: 44px; } }
+.install-help { margin-top: 14px; border: 2px solid var(--ink); border-radius: 16px; background: var(--sheet); padding: 18px 20px; font: 14px/1.7 var(--cjk); }
+.install-help[hidden] { display: none; }
+.install-help h3 { margin: 0 0 6px; font-size: 16px; }
+.install-help h4 { margin: 16px 0 4px; font-size: 14px; }
+.install-help p { margin: 4px 0; }
+.install-help .note { font-size: 13px; opacity: .75; }
+.install-help .code { margin-top: 8px; padding: 12px 14px; gap: 8px; font-size: 13px; box-shadow: 3px 3px 0 var(--hard); }
 .code { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin-top: 14px; background: var(--scope); color: var(--scope-ink); border: var(--line) solid var(--ink); border-radius: 16px; box-shadow: 6px 6px 0 var(--hard); padding: 18px 20px; font: 14px/1.8 var(--mono); }
 .code[hidden] { display: none; }
 .code pre { margin: 0; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -716,9 +728,12 @@ on completed, state: on, VOUT 4.98 V</div>
     <p class="lede" style="margin-top:18px">先安装 Node.js 18 或更新版本，再执行 npm 安装命令。安装后运行 <code>voloo ls</code> 查看设备，或用 <code>voloo demo</code> 先体验模拟仪表盘。</p>
     <div class="start-grid">
       <div data-tabs>
+        <div class="tabs-row">
         <div class="tabs" role="tablist" aria-label="安装方式">
           <button role="tab" type="button" aria-selected="true" data-tab="npm" id="tab-npm" aria-controls="panel-npm" tabindex="0">npm</button>
           <button role="tab" type="button" aria-selected="false" data-tab="demo" id="tab-demo" aria-controls="panel-demo" tabindex="-1">先试 demo</button>
+        </div>
+        <button class="help-btn" type="button" aria-expanded="false" aria-controls="install-help" aria-label="安装遇到权限问题？" title="安装遇到权限问题？" data-help-for="npm">?</button>
         </div>
         <div class="code" role="tabpanel" id="panel-npm" aria-labelledby="tab-npm" data-panel="npm"><button class="copy" type="button" data-copy="npm install -g @librezoo/voloo">复制</button><pre><span class="c"># Node 18+ · 安装 voloo</span>
 <span class="p">$</span> npm install -g @librezoo/voloo
@@ -726,6 +741,27 @@ on completed, state: on, VOUT 4.98 V</div>
 <span class="p">$</span> npx @librezoo/voloo ls</pre></div>
         <div class="code" role="tabpanel" id="panel-demo" aria-labelledby="tab-demo" data-panel="demo" hidden><button class="copy" type="button" data-copy="voloo demo">复制</button><pre><span class="c"># 没有硬件也能看仪表盘，设备是模拟的</span>
 <span class="p">$</span> voloo demo</pre></div>
+        <div class="install-help" id="install-help" hidden>
+          <h3>安装时提示权限不足（EACCES）？</h3>
+          <p>原因是 npm 默认把全局包装进系统目录，普通账户没有写入权限。请不要加 <code>sudo</code>：它会让缓存归属变成 root，之后更容易出错。</p>
+          <h4>方案一（推荐）：改用自己目录下的全局路径</h4>
+          <div class="code"><button class="copy" type="button" data-copy="mkdir -p ~/.npm-global&#10;npm config set prefix ~/.npm-global&#10;echo 'export PATH=&quot;$HOME/.npm-global/bin:$PATH&quot;' >> ~/.zshrc&#10;source ~/.zshrc&#10;npm install -g @librezoo/voloo@latest">复制</button><pre><span class="p">$</span> mkdir -p ~/.npm-global
+<span class="p">$</span> npm config set prefix ~/.npm-global
+<span class="p">$</span> echo 'export PATH="$HOME/.npm-global/bin:$PATH"' &gt;&gt; ~/.zshrc
+<span class="p">$</span> source ~/.zshrc
+<span class="p">$</span> npm install -g @librezoo/voloo@latest</pre></div>
+          <p class="note">使用 bash 的话，把 <code>~/.zshrc</code> 换成 <code>~/.bashrc</code>。</p>
+          <h4>方案二：用版本管理器安装 Node</h4>
+          <p>nvm、fnm、Volta 或 Homebrew 安装的 Node，全局目录默认属于当前用户，不会遇到这个问题。</p>
+          <h4>方案三：不安装，直接运行</h4>
+          <div class="code"><button class="copy" type="button" data-copy="npx @librezoo/voloo@latest ls">复制</button><pre><span class="p">$</span> npx @librezoo/voloo@latest ls</pre></div>
+          <h4>已经用 sudo 装过？</h4>
+          <div class="code"><button class="copy" type="button" data-copy="sudo npm uninstall -g @librezoo/voloo&#10;sudo chown -R $(id -u):$(id -g) ~/.npm">复制</button><pre><span class="p">$</span> sudo npm uninstall -g @librezoo/voloo
+<span class="p">$</span> sudo chown -R $(id -u):$(id -g) ~/.npm</pre></div>
+          <p class="note">然后按方案一重新安装。</p>
+          <h4>装好后仍找不到 voloo？</h4>
+          <p>运行 <code>npm config get prefix</code>，确认该目录下的 <code>bin</code> 在 PATH 里。Windows 重新打开终端即可。</p>
+        </div>
         <div class="links">
           <a class="btn primary" href="https://www.npmjs.com/package/@librezoo/voloo" target="_blank" rel="noopener">npm 安装包 ↗</a>
           <a class="btn" href="https://github.com/librezoo/voloo" target="_blank" rel="noopener">开源链接 ↗</a>
@@ -990,6 +1026,19 @@ DEV = bench-a 或 ${UID}`;
     else if (keys.every(k => ans[k] === 'ok')) { v.dataset.v = 'ok'; v.innerHTML = '<span class="big">三项自查已填写</span><p>这里只根据回答提示，不检测实物接线。还需确认标称电压范围、最高建议电流 3 A，以及功率和温升条件。插上 USB-C，运行 <span class="mono">voloo ls</span>。</p>'; }
     else { v.dataset.v = 'none'; v.innerHTML = '<span class="big">还差 ' + keys.filter(k => !ans[k]).length + ' 项</span><p>确认接线及电气边界后，再打开电源。</p>'; }
   }));
+
+  /* ---------- install help (collapsed by default) ---------- */
+  $$('[data-help-for]').forEach(btn => {
+    const group = btn.closest('[data-tabs]');
+    const panel = document.getElementById(btn.getAttribute('aria-controls'));
+    const set = open => { btn.setAttribute('aria-expanded', String(open)); panel.hidden = !open; };
+    btn.addEventListener('click', () => set(panel.hidden));
+    panel.addEventListener('keydown', e => { if (e.key === 'Escape') { set(false); btn.focus(); } });
+    $$('[role="tab"]', group).forEach(t => t.addEventListener('click', () => {
+      const on = t.dataset.tab === btn.dataset.helpFor;
+      btn.hidden = !on; if (!on) set(false);
+    }));
+  });
 
   /* ---------- install tabs ---------- */
   $$('[data-tabs]').forEach(group => {

@@ -5,6 +5,9 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
 <title>voloo programmable power switch</title>
+
+
+
 <meta content="voloo puts device power under computer, script and AI agent control over USB-C. Switch, discharge and power-cycle with read-back confirmation at every step." name="description"/>
 <link href="assets/fonts/fonts.css" rel="stylesheet"/>
 <style id="locale-style">
@@ -360,6 +363,18 @@ section { position: relative; padding-block: clamp(72px, 10vw, 140px); }
 .tabs button { border: 2px solid var(--ink); background: var(--sheet); border-radius: 999px; padding: 8px 16px; font-weight: 700; cursor: pointer; }
 .tabs button[aria-selected="true"] { background: var(--ink); color: var(--ground); }
 @media (max-width: 480px) { .tabs { gap: 6px; } .tabs button { font-size: 14px; padding: 8px 12px; min-height: 44px; } }
+.tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.help-btn { flex: none; width: 36px; height: 36px; border: 2px solid var(--ink); background: var(--sheet); color: var(--ink); border-radius: 50%; font: 800 17px/1 var(--mono); cursor: pointer; padding: 0; }
+.help-btn:hover, .help-btn[aria-expanded="true"] { background: var(--ink); color: var(--ground); }
+.help-btn[hidden] { display: none; }
+@media (max-width: 480px) { .help-btn { width: 44px; height: 44px; } }
+.install-help { margin-top: 14px; border: 2px solid var(--ink); border-radius: 16px; background: var(--sheet); padding: 18px 20px; font: 14px/1.7 var(--cjk); }
+.install-help[hidden] { display: none; }
+.install-help h3 { margin: 0 0 6px; font-size: 16px; }
+.install-help h4 { margin: 16px 0 4px; font-size: 14px; }
+.install-help p { margin: 4px 0; }
+.install-help .note { font-size: 13px; opacity: .75; }
+.install-help .code { margin-top: 8px; padding: 12px 14px; gap: 8px; font-size: 13px; box-shadow: 3px 3px 0 var(--hard); }
 .code { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin-top: 14px; background: var(--scope); color: var(--scope-ink); border: var(--line) solid var(--ink); border-radius: 16px; box-shadow: 6px 6px 0 var(--hard); padding: 18px 20px; font: 14px/1.8 var(--mono); }
 .code[hidden] { display: none; }
 .code pre { margin: 0; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -752,9 +767,12 @@ on completed, state: on, VOUT 4.98 V</div>
 <p class="lede" style="margin-top:18px"> Install Node.js 18 or newer, then install with npm. Run  <code>voloo ls</code>  to list devices, or use  <code>voloo demo</code>  to try the simulated dashboard. </p>
 <div class="start-grid">
 <div data-tabs="">
+<div class="tabs-row">
 <div aria-label="Installation options" class="tabs" role="tablist">
 <button aria-controls="panel-npm" aria-selected="true" data-tab="npm" id="tab-npm" role="tab" tabindex="0" type="button">npm</button>
 <button aria-controls="panel-demo" aria-selected="false" data-tab="demo" id="tab-demo" role="tab" tabindex="-1" type="button"> Try the demo first </button>
+</div>
+<button aria-controls="install-help" aria-expanded="false" aria-label="Install permission problem?" class="help-btn" data-help-for="npm" title="Install permission problem?" type="button">?</button>
 </div>
 <div aria-labelledby="tab-npm" class="code" data-panel="npm" id="panel-npm" role="tabpanel"><button class="copy" data-copy="npm install -g @librezoo/voloo" type="button"> Copy </button><pre><span class="c"> # Node 18+ · Install voloo </span>
 <span class="p">$</span> npm install -g @librezoo/voloo
@@ -762,6 +780,32 @@ on completed, state: on, VOUT 4.98 V</div>
 <span class="p">$</span> npx @librezoo/voloo ls</pre></div>
 <div aria-labelledby="tab-demo" class="code" data-panel="demo" hidden="" id="panel-demo" role="tabpanel"><button class="copy" data-copy="voloo demo" type="button"> Copy </button><pre><span class="c"> # Explore the dashboard with simulated devices </span>
 <span class="p">$</span> voloo demo</pre></div>
+<div class="install-help" hidden="" id="install-help">
+<h3> Permission error (EACCES) during install? </h3>
+<p> npm installs global packages into a system directory by default, which a normal account cannot write to. Do not add  <code>sudo</code>. It leaves your npm cache owned by root and causes more problems later. </p>
+<h4> Option 1 (recommended): use a global folder in your home directory </h4>
+<div class="code"><button class="copy" data-copy="mkdir -p ~/.npm-global
+npm config set prefix ~/.npm-global
+echo 'export PATH=&quot;$HOME/.npm-global/bin:$PATH&quot;' &gt;&gt; ~/.zshrc
+source ~/.zshrc
+npm install -g @librezoo/voloo@latest" type="button"> Copy </button><pre><span class="p">$</span> mkdir -p ~/.npm-global
+<span class="p">$</span> npm config set prefix ~/.npm-global
+<span class="p">$</span> echo 'export PATH="$HOME/.npm-global/bin:$PATH"' &gt;&gt; ~/.zshrc
+<span class="p">$</span> source ~/.zshrc
+<span class="p">$</span> npm install -g @librezoo/voloo@latest</pre></div>
+<p class="note"> If you use bash, replace  <code>~/.zshrc</code>  with  <code>~/.bashrc</code>.</p>
+<h4> Option 2: install Node with a version manager </h4>
+<p> With nvm, fnm, Volta or Homebrew, the global folder belongs to your user, so this error does not occur. </p>
+<h4> Option 3: run it without installing </h4>
+<div class="code"><button class="copy" data-copy="npx @librezoo/voloo@latest ls" type="button"> Copy </button><pre><span class="p">$</span> npx @librezoo/voloo@latest ls</pre></div>
+<h4> Already installed with sudo? </h4>
+<div class="code"><button class="copy" data-copy="sudo npm uninstall -g @librezoo/voloo
+sudo chown -R $(id -u):$(id -g) ~/.npm" type="button"> Copy </button><pre><span class="p">$</span> sudo npm uninstall -g @librezoo/voloo
+<span class="p">$</span> sudo chown -R $(id -u):$(id -g) ~/.npm</pre></div>
+<p class="note"> Then reinstall with option 1. </p>
+<h4> Installed but voloo is not found? </h4>
+<p> Run  <code>npm config get prefix</code>  and check that the  <code>bin</code>  folder in that directory is on your PATH. On Windows, reopen the terminal. </p>
+</div>
 <div class="links">
 <a class="btn primary" href="https://www.npmjs.com/package/@librezoo/voloo" rel="noopener" target="_blank"> npm package ↗ </a>
 <a class="btn" href="https://github.com/librezoo/voloo" rel="noopener" target="_blank"> Source code ↗ </a>
@@ -1028,6 +1072,19 @@ DEV = bench-a or ${UID}`;
     else if (keys.every(k => ans[k] === 'ok')) { v.dataset.v = 'ok'; v.innerHTML = '<span class="big">Checklist complete</span><p>This checklist uses your answers; it cannot inspect physical wiring. Also check the nominal voltage range, maximum recommended 3 A current, power and temperature. Connect USB-C and run <span class="mono">voloo ls</span>。</p>'; }
     else { v.dataset.v = 'none'; v.innerHTML = '<span class="big">Remaining: ' + keys.filter(k => !ans[k]).length + ' checks</span><p>Check wiring and electrical limits before enabling power.</p>'; }
   }));
+
+  /* ---------- install help (collapsed by default) ---------- */
+  $$('[data-help-for]').forEach(btn => {
+    const group = btn.closest('[data-tabs]');
+    const panel = document.getElementById(btn.getAttribute('aria-controls'));
+    const set = open => { btn.setAttribute('aria-expanded', String(open)); panel.hidden = !open; };
+    btn.addEventListener('click', () => set(panel.hidden));
+    panel.addEventListener('keydown', e => { if (e.key === 'Escape') { set(false); btn.focus(); } });
+    $$('[role="tab"]', group).forEach(t => t.addEventListener('click', () => {
+      const on = t.dataset.tab === btn.dataset.helpFor;
+      btn.hidden = !on; if (!on) set(false);
+    }));
+  });
 
   /* ---------- install tabs ---------- */
   $$('[data-tabs]').forEach(group => {
