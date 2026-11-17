@@ -361,6 +361,7 @@ async fn health(State(app): State<App>) -> Json<Value> {
         "version": env!("CARGO_PKG_VERSION"), "pid": std::process::id(),
         "uptime_s": app.started.elapsed().as_secs(), "devices": app.manager.devices().len(),
         "watchers": app.manager.watchers.load(Ordering::SeqCst),
+        "host_update_available": app.manager.host_update_available(),
     }))
 }
 async fn devices(State(app): State<App>) -> Json<Value> {

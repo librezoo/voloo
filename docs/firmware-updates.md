@@ -43,7 +43,8 @@ GET; nothing about you or your devices is sent) and notes which connected device
 updated. `voloo ls`, `voloo status` and `voloo info` then print one line in a terminal, once
 per device and version; JSON, MCP and piped output stay unchanged apart from a read-only
 `firmware_update_available` field, and the dashboard shows the version in the USB firmware
-panel. Nothing is ever installed automatically. Turn it off with `check_updates = false` in
+panel. The same manifest names the newest voloo (npm) version; when yours is older you get
+one line saying so (merged with the firmware line when a firmware needs a newer voloo). Nothing is ever installed automatically. Turn it off with `check_updates = false` in
 `config.toml` or `VOLOO_NO_UPDATE_CHECK=1`.
 
 ## During and after updating

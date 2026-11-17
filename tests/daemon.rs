@@ -1662,7 +1662,7 @@ fn newer_manifest(rig: &Rig) -> (String, String) {
         .unwrap();
     let next = format!("{a}.{}", b.parse::<u16>().unwrap() + 1);
     let code = (a.parse::<u16>().unwrap() << 8) | (b.parse::<u16>().unwrap() + 1);
-    let manifest = json!({"schema":1,"product":"voloo-switch-x035","firmware":[{
+    let manifest = json!({"schema":1,"product":"voloo-switch-x035","host":{"latest":"99.0.0"},"firmware":[{
         "version": next, "code": code, "sha256": "0".repeat(64), "size": 1,
         "urls": ["https://voloo.librezoo.com/firmware/x035/x.voloofw"],
         "hardware": [hardware], "min_host": "0.0.1"}]});
