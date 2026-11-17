@@ -336,5 +336,21 @@
   "持续按住，将导线插入绿色圆孔": "Keep pressing and insert the wire into the green round hole",
   "松开后轻拉导线确认夹紧": "Release and gently tug to check the grip",
   "海报与说明书下载": "Downloads",
-  "厂家图纸": "Manufacturer drawing"
+  "厂家图纸": "Manufacturer drawing",
+  "安装时提示权限不足（EACCES）？": "Permission error (EACCES) during install?",
+  "原因是 npm 默认把全局包装进系统目录，普通账户没有写入权限。请不要加": "npm installs global packages into a system directory by default, which a normal account cannot write to. Do not add",
+  "：它会让缓存归属变成 root，之后更容易出错。": ". It leaves your npm cache owned by root and causes more problems later.",
+  "方案一（推荐）：改用自己目录下的全局路径": "Option 1 (recommended): use a global folder in your home directory",
+  "使用 bash 的话，把": "If you use bash, replace",
+  "换成": "with",
+  "方案二：用版本管理器安装 Node": "Option 2: install Node with a version manager",
+  "nvm、fnm、Volta 或 Homebrew 安装的 Node，全局目录默认属于当前用户，不会遇到这个问题。": "With nvm, fnm, Volta or Homebrew, the global folder belongs to your user, so this error does not occur.",
+  "方案三：不安装，直接运行": "Option 3: run it without installing",
+  "已经用 sudo 装过？": "Already installed with sudo?",
+  "然后按方案一重新安装。": "Then reinstall with option 1.",
+  "装好后仍找不到 voloo？": "Installed but voloo is not found?",
+  "运行": "Run",
+  "，确认该目录下的": " and check that the",
+  "在 PATH 里。Windows 重新打开终端即可。": "folder in that directory is on your PATH. On Windows, reopen the terminal.",
+  "安装遇到权限问题？": "Install permission problem?"
 }
