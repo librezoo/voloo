@@ -981,13 +981,14 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "voloo"
-version = "0.7.3"
+version = "0.7.4"
 dependencies = [
  "axum",
  "clap",
  "futures-util",
  "getrandom 0.4.3",
  "libc",
+ "ring",
  "serde",
  "serde_json",
  "serialport",

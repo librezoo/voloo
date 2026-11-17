@@ -114,8 +114,9 @@ simulated devices (its own home, USB scanning off) and opens the dashboard.
 
 ## USB firmware maintenance
 
-`voloo firmware update DEV` downloads the encrypted firmware paired with the
-installed CLI, reconnects to the same UID and verifies the result. The dashboard
+`voloo firmware update DEV` reads the firmware manifest at `voloo.librezoo.com/firmware/x035/`
+(repository mirror as fallback), picks the newest encrypted firmware that fits the device and
+this CLI, verifies its SHA-256, reconnects to the same UID and verifies the result. The dashboard
 offers the same operation under **USB firmware**, plus optional local files and
 rollback. Use a compatible device and the package recommended for it.
 

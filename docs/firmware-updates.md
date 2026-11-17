@@ -18,8 +18,10 @@ voloo status DEV
 voloo firmware update DEV
 ```
 
-The online command downloads the encrypted firmware paired with the installed
-CLI. It does not search for arbitrary newer firmware. For an offline file from
+The online command reads the published firmware manifest, chooses the newest encrypted
+firmware that supports the device's hardware identity and this CLI version, checks its
+SHA-256 and never installs older firmware than the device runs. If a newer firmware needs
+a newer host it says so; it does not install anything it cannot verify. For an offline file from
 the matching official release:
 
 ```sh

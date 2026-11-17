@@ -910,29 +910,173 @@ impl Downloaded {
         }
         Ok(Self { _file: file, image })
     }
-    fn fetch() -> Result<Self, OpError> {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .https_only(true)
-            .max_redirects(5)
-            .timeout_global(Some(Duration::from_secs(30)))
-            .build()
-            .into();
-        let mut response = agent
-            .get(&download_url())
-            .header("Accept", "application/octet-stream")
-            .call()
-            .map_err(|e| {
-                OpError::new(
-                    ErrorKind::LinkError,
-                    format!("Cannot download the paired encrypted firmware: {e}"),
-                )
-            })?;
-        Self::stage(
-            response.body_mut().as_reader(),
+    /// Picks the newest published firmware that fits this device and host from the
+    /// manifest (website first, repository mirror second), verifies its SHA-256 and
+    /// stages it. Only when no manifest can be read at all does it fall back to the
+    /// asset paired with this host release.
+    fn fetch(hardware: &str, current: u16) -> Result<Self, OpError> {
+        let agent = http_agent();
+        let (data, expected) = match load_manifest(&agent) {
+            Some(manifest) => {
+                let entry = select_entry(&manifest, hardware, current)?;
+                (download_entry(&agent, entry)?, Some(entry.code))
+            }
+            None => (http_get(&agent, &download_url(), MAX_FILE)?, None),
+        };
+        let downloaded = Self::stage(
+            std::io::Cursor::new(data),
             &std::env::temp_dir(),
             &new_trace_id(),
-        )
+        )?;
+        let version = match &downloaded.image {
+            Image::Sealed(bundle) => bundle.firmware_version,
+            _ => 0,
+        };
+        if expected.is_some_and(|code| code != version) {
+            return Err(invalid(
+                "The downloaded package does not match the version announced by the firmware manifest",
+            ));
+        }
+        if version < current {
+            return Err(invalid(
+                "Online update never installs older firmware than the device runs; use `voloo firmware rollback` or a local file",
+            ));
+        }
+        Ok(downloaded)
     }
+}
+
+const MANIFEST_PRODUCT: &str = "voloo-switch-x035";
+const MAX_MANIFEST: usize = 64 * 1024;
+
+#[derive(Debug, Deserialize)]
+struct Manifest {
+    schema: u32,
+    product: String,
+    firmware: Vec<ManifestEntry>,
+}
+#[derive(Debug, Deserialize)]
+struct ManifestEntry {
+    version: String,
+    code: u16,
+    sha256: String,
+    size: usize,
+    urls: Vec<String>,
+    hardware: Vec<String>,
+    min_host: String,
+}
+
+fn manifest_urls() -> Vec<String> {
+    #[cfg(debug_assertions)]
+    if let Ok(url) = std::env::var("VOLOO_FIRMWARE_MANIFEST_URL") {
+        return vec![url]; // development builds only: lets tests serve a local manifest
+    }
+    vec![
+        "https://voloo.librezoo.com/firmware/x035/manifest.json".into(),
+        "https://raw.githubusercontent.com/librezoo/voloo/main/firmware/x035/manifest.json".into(),
+    ]
+}
+fn http_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .https_only(
+            !cfg!(debug_assertions) || std::env::var_os("VOLOO_FIRMWARE_MANIFEST_URL").is_none(),
+        )
+        .max_redirects(5)
+        .timeout_global(Some(Duration::from_secs(30)))
+        .build()
+        .into()
+}
+fn http_get(agent: &ureq::Agent, url: &str, limit: usize) -> Result<Vec<u8>, OpError> {
+    let mut response = agent
+        .get(url)
+        .header("Accept", "application/octet-stream")
+        .call()
+        .map_err(|e| OpError::new(ErrorKind::LinkError, format!("Cannot download {url}: {e}")))?;
+    let mut data = Vec::new();
+    response
+        .body_mut()
+        .as_reader()
+        .take(limit as u64 + 1)
+        .read_to_end(&mut data)
+        .map_err(|e| OpError::new(ErrorKind::LinkError, format!("Download failed: {e}")))?;
+    if data.len() > limit {
+        return Err(invalid(format!("{url} exceeds {limit} bytes")));
+    }
+    Ok(data)
+}
+fn load_manifest(agent: &ureq::Agent) -> Option<Manifest> {
+    manifest_urls().iter().find_map(|url| {
+        let data = http_get(agent, url, MAX_MANIFEST).ok()?;
+        let manifest: Manifest = serde_json::from_slice(&data).ok()?;
+        (manifest.schema == 1 && manifest.product == MANIFEST_PRODUCT).then_some(manifest)
+    })
+}
+fn version_code(text: &str) -> Option<u16> {
+    let (a, b) = text.split_once('.')?;
+    Some((a.parse::<u16>().ok()? << 8) | b.parse::<u16>().ok()?)
+}
+fn host_at_least(min: &str) -> bool {
+    let parse = |text: &str| -> Option<[u64; 3]> {
+        let mut parts = text.split('.').map(|p| p.parse::<u64>().ok());
+        Some([parts.next()??, parts.next()??, parts.next()??])
+    };
+    match (parse(env!("CARGO_PKG_VERSION")), parse(min)) {
+        (Some(host), Some(min)) => host >= min,
+        _ => false,
+    }
+}
+fn select_entry<'a>(
+    manifest: &'a Manifest,
+    hardware: &str,
+    current: u16,
+) -> Result<&'a ManifestEntry, OpError> {
+    let fits: Vec<&ManifestEntry> = manifest
+        .firmware
+        .iter()
+        .filter(|e| {
+            e.hardware.iter().any(|h| h == hardware) && version_code(&e.version) == Some(e.code)
+        })
+        .collect();
+    if fits.is_empty() {
+        return Err(invalid(format!(
+            "No published firmware supports hardware identity {hardware}; contact support rather than changing protection settings"
+        )));
+    }
+    let usable: Vec<&ManifestEntry> = fits
+        .iter()
+        .copied()
+        .filter(|e| host_at_least(&e.min_host))
+        .collect();
+    let Some(best) = usable.iter().copied().max_by_key(|e| e.code) else {
+        return Err(invalid(
+            "A newer firmware exists but needs a newer host; run `npm install -g @librezoo/voloo@latest`, then `voloo daemon stop`, and retry",
+        ));
+    };
+    if best.code < current {
+        return Err(invalid(
+            "The device already runs newer firmware than the newest published for this host",
+        ));
+    }
+    Ok(best)
+}
+fn download_entry(agent: &ureq::Agent, entry: &ManifestEntry) -> Result<Vec<u8>, OpError> {
+    let mut last = invalid("The firmware manifest lists no download address");
+    for url in &entry.urls {
+        match http_get(agent, url, MAX_FILE) {
+            Ok(data) => {
+                let digest = ring::digest::digest(&ring::digest::SHA256, &data);
+                let hex: String = digest.as_ref().iter().map(|b| format!("{b:02x}")).collect();
+                if data.len() == entry.size && hex.eq_ignore_ascii_case(&entry.sha256) {
+                    return Ok(data);
+                }
+                last = invalid(format!(
+                    "{url} does not match the manifest size/SHA-256; refused"
+                ));
+            }
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
 }
 
 pub fn perform_online(
@@ -957,7 +1101,8 @@ pub fn perform_online(
     }
     wait_off(device, Duration::from_secs(1))?;
     progress(Progress::new("downloading", 0, true));
-    let downloaded = Downloaded::fetch()?;
+    let current = version_code(&info.identity.firmware_version).unwrap_or(0);
+    let downloaded = Downloaded::fetch(&info.identity.hardware_version, current)?;
     let result = perform(device, Some(downloaded.image.clone()), scan_usb, progress);
     // The guard remains alive through reconnect/confirmation/rollback. All
     // exits, including download/parse errors, remove its private temp directory.
@@ -1404,5 +1549,63 @@ mod download_tests {
                 env!("CARGO_PKG_VERSION")
             )
         );
+    }
+}
+
+#[cfg(test)]
+mod manifest_tests {
+    use super::*;
+    fn entry(version: &str, hardware: &[&str], min_host: &str) -> ManifestEntry {
+        ManifestEntry {
+            version: version.into(),
+            code: version_code(version).unwrap(),
+            sha256: String::new(),
+            size: 0,
+            urls: vec![],
+            hardware: hardware.iter().map(|h| h.to_string()).collect(),
+            min_host: min_host.into(),
+        }
+    }
+    fn manifest(firmware: Vec<ManifestEntry>) -> Manifest {
+        Manifest {
+            schema: 1,
+            product: MANIFEST_PRODUCT.into(),
+            firmware,
+        }
+    }
+    #[test]
+    fn picks_newest_compatible_and_never_older_than_installed() {
+        let m = manifest(vec![
+            entry("3.2", &["0.2"], "0.7.2"),
+            entry("3.3", &["0.2"], "0.7.3"),
+        ]);
+        assert_eq!(select_entry(&m, "0.2", 0x302).unwrap().version, "3.3");
+        assert_eq!(select_entry(&m, "0.2", 0x303).unwrap().version, "3.3");
+        assert!(select_entry(&m, "0.2", 0x400).is_err());
+    }
+    #[test]
+    fn unsupported_hardware_and_too_new_for_host_are_refused() {
+        let m = manifest(vec![entry("3.3", &["0.2"], "0.7.3")]);
+        assert!(select_entry(&m, "3.0", 0x300).is_err());
+        let future = manifest(vec![entry("3.3", &["0.2"], "99.0.0")]);
+        assert!(
+            select_entry(&future, "0.2", 0x302)
+                .unwrap_err()
+                .message
+                .contains("newer host")
+        );
+    }
+    #[test]
+    fn entry_whose_code_disagrees_with_its_version_is_ignored() {
+        let mut bad = entry("3.3", &["0.2"], "0.7.3");
+        bad.code = 0x309;
+        assert!(select_entry(&manifest(vec![bad]), "0.2", 0x302).is_err());
+    }
+    #[test]
+    fn host_version_comparison_is_numeric() {
+        assert!(host_at_least("0.7.3"));
+        assert!(host_at_least("0.0.9"));
+        assert!(!host_at_least("0.10.0"));
+        assert!(!host_at_least("nonsense"));
     }
 }
