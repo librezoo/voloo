@@ -18,5 +18,8 @@
         "https://github.com/librezoo/voloo/releases/download/v0.7.3/voloo-switch-x035.voloofw"
       ]
     }
-  ]
+  ],
+  "host": {
+    "latest": "0.7.6"
+  }
 }
