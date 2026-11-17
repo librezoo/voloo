@@ -238,6 +238,7 @@ async fn serve(manager: Arc<Manager>, config: Config) -> Result<(), String> {
 fn router(app: App) -> Router {
     Router::new()
         .route("/v1/health", get(health))
+        .route("/v1/updates/refresh", post(updates_refresh))
         .route("/v1/devices", get(devices))
         .route("/v1/devices/{id}", get(device_status))
         .route("/v1/devices/{id}/info", get(device_info))
@@ -363,6 +364,13 @@ async fn health(State(app): State<App>) -> Json<Value> {
         "watchers": app.manager.watchers.load(Ordering::SeqCst),
         "host_update_available": app.manager.host_update_available(),
     }))
+}
+async fn updates_refresh(State(app): State<App>) -> Json<Value> {
+    let manager = app.manager.clone();
+    let ok = tokio::task::spawn_blocking(move || crate::updatecheck::refresh_now(&manager))
+        .await
+        .unwrap_or(false);
+    Json(json!({"manifest": ok}))
 }
 async fn devices(State(app): State<App>) -> Json<Value> {
     Json(json!(app.manager.devices()))

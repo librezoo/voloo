@@ -18,6 +18,13 @@ voloo status DEV
 voloo firmware update DEV
 ```
 
+With several Voloo connected, `voloo firmware update` (no device) first lists each device
+that will be updated and each one skipped with the reason (already up to date, locked, not
+idle OFF with VOUT <= 1 V, needs a newer voloo), asks once in a terminal, and then updates one
+device at a time; a skipped or failed device never stops the others and the exit code is 2
+when any update failed. Scripts pass `--all` to skip the question; `--all` cannot be combined
+with a device or a local file. With one Voloo connected the command behaves as before.
+
 The online command reads the published firmware manifest, chooses the newest encrypted
 firmware that supports the device's hardware identity and this CLI version, checks its
 SHA-256 and never installs older firmware than the device runs. If a newer firmware needs

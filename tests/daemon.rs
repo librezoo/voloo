@@ -1723,3 +1723,61 @@ fn update_check_is_off_unless_scanning_usb_or_enabled() {
     );
     assert!(!rig.home().join("update-check.json").exists());
 }
+
+#[test]
+fn firmware_update_without_a_device_lists_plan_and_refuses_to_guess_without_all() {
+    let mut rig = Rig::new("", 600);
+    rig.ready();
+    let (manifest, _) = newer_manifest(&rig);
+    let url = serve_manifest(manifest);
+    rig.run(&["daemon", "stop"]);
+    rig.env.push(("VOLOO_FIRMWARE_MANIFEST_URL".into(), url));
+    rig.ready();
+    // Two devices have an update, nobody can be asked (no terminal): exit 4 and nothing is written.
+    let out = rig.cmd(&["firmware", "update"]).output().unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(4), "{err}");
+    assert!(err.contains("--all"), "{err}");
+    assert!(
+        err.contains(UID_A) && err.contains(UID_B),
+        "plan lists both devices: {err}"
+    );
+    // --all cannot be combined with a device.
+    let out = rig
+        .cmd(&["firmware", "update", "--all", UID_A])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(4));
+}
+
+#[test]
+fn firmware_update_all_skips_devices_without_an_update() {
+    let mut rig = Rig::new("", 600);
+    rig.ready();
+    // Manifest announces nothing newer than the simulated devices run.
+    let (_, info) = rig.run(&["info", UID_A]);
+    let hardware = info["hardware_version"].as_str().unwrap().to_string();
+    let (a, b) = info["firmware_version"]
+        .as_str()
+        .unwrap()
+        .split_once('.')
+        .unwrap();
+    let code = (a.parse::<u16>().unwrap() << 8) | b.parse::<u16>().unwrap();
+    let manifest = json!({"schema":1,"product":"voloo-switch-x035","firmware":[{
+        "version": info["firmware_version"], "code": code, "sha256": "0".repeat(64), "size": 1,
+        "urls": ["https://voloo.librezoo.com/firmware/x035/x.voloofw"],
+        "hardware": [hardware], "min_host": "0.0.1"}]});
+    let url = serve_manifest(manifest.to_string());
+    rig.run(&["daemon", "stop"]);
+    rig.env.push(("VOLOO_FIRMWARE_MANIFEST_URL".into(), url));
+    rig.ready();
+    let (code, result) = rig.run(&["firmware", "update", "--all"]);
+    assert_eq!(code, 0, "{result}");
+    let rows = result.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows.iter()
+            .all(|r| r["outcome"] == "skipped" && r["reason"] == "already up to date"),
+        "{result}"
+    );
+}

@@ -1022,6 +1022,56 @@ fn load_manifest(agent: &ureq::Agent) -> Option<Manifest> {
     })
 }
 
+/// One connected device in a multi-device `voloo firmware update`.
+#[derive(Debug, PartialEq, Serialize)]
+pub struct BulkItem {
+    pub uid: String,
+    pub nickname: String,
+    pub current: String,
+    /// Version it will be updated to; `None` when skipped.
+    pub target: Option<String>,
+    pub skip: Option<String>,
+}
+/// Decides, from `/v1/devices` rows, which online devices get updated and why the others
+/// are skipped. Offline devices are left out entirely.
+pub fn plan_bulk(rows: &Value) -> Vec<BulkItem> {
+    let mut plan = Vec::new();
+    for row in rows.as_array().map(Vec::as_slice).unwrap_or(&[]) {
+        if row["online"] != true {
+            continue;
+        }
+        let text = |v: &Value| v.as_str().unwrap_or("").to_string();
+        let mut item = BulkItem {
+            uid: text(&row["uid"]),
+            nickname: text(&row["nickname"]),
+            current: text(&row["identity"]["firmware_version"]),
+            target: None,
+            skip: None,
+        };
+        let status = &row["status"];
+        let idle_off = status["power_state"] == "OFF"
+            && status["busy"] != true
+            && status["vout_valid"] == true
+            && status["vin_valid"] == true
+            && status["vout_mv"].as_u64().is_some_and(|mv| mv <= 1000);
+        if row["locked"] == true {
+            item.skip = Some("locked".into());
+        } else if let Some(version) = row["firmware_update_available"].as_str() {
+            if idle_off {
+                item.target = Some(version.to_string());
+            } else {
+                item.skip = Some("not idle OFF with VOUT <= 1 V".into());
+            }
+        } else if let Some(needs) = row["firmware_update_needs_host"]["min_host"].as_str() {
+            item.skip = Some(format!("needs voloo {needs} or newer"));
+        } else {
+            item.skip = Some("already up to date".into());
+        }
+        plan.push(item);
+    }
+    plan
+}
+
 /// Background update check: the manifest from the first reachable source, short timeout.
 pub fn fetch_manifest_for_check() -> Option<Manifest> {
     load_manifest(&http_agent_with(Duration::from_secs(8)))
@@ -1720,6 +1770,30 @@ mod manifest_tests {
             latest: "0.0.1".into(),
         });
         assert_eq!(host_update_available(&m), None, "not newer");
+    }
+    #[test]
+    fn bulk_plan_updates_only_idle_off_devices_with_an_update() {
+        use serde_json::json;
+        let off = json!({"power_state":"OFF","busy":false,"vout_valid":true,"vin_valid":true,"vout_mv":0});
+        let on = json!({"power_state":"ON","busy":false,"vout_valid":true,"vin_valid":true,"vout_mv":5000});
+        let rows = json!([
+            {"uid":"A","online":true,"identity":{"firmware_version":"3.2"},"status":off,"firmware_update_available":"3.3"},
+            {"uid":"B","online":true,"identity":{"firmware_version":"3.2"},"status":on,"firmware_update_available":"3.3"},
+            {"uid":"C","online":true,"locked":true,"identity":{"firmware_version":"3.2"},"status":off,"firmware_update_available":"3.3"},
+            {"uid":"D","online":true,"identity":{"firmware_version":"3.3"},"status":off},
+            {"uid":"E","online":true,"identity":{"firmware_version":"3.2"},"status":off,"firmware_update_needs_host":{"version":"3.4","min_host":"9.0.0"}},
+            {"uid":"F","online":false,"identity":{"firmware_version":"3.2"},"firmware_update_available":"3.3"}]);
+        let plan = plan_bulk(&rows);
+        let summary: Vec<(String, Option<String>, Option<String>)> = plan
+            .iter()
+            .map(|i| (i.uid.clone(), i.target.clone(), i.skip.clone()))
+            .collect();
+        assert_eq!(summary.len(), 5, "offline devices are left out");
+        assert_eq!(summary[0], ("A".into(), Some("3.3".into()), None));
+        assert!(summary[1].2.as_deref().unwrap().contains("idle OFF"));
+        assert_eq!(summary[2].2.as_deref(), Some("locked"));
+        assert_eq!(summary[3].2.as_deref(), Some("already up to date"));
+        assert!(summary[4].2.as_deref().unwrap().contains("9.0.0"));
     }
     #[test]
     fn host_version_comparison_is_numeric() {
