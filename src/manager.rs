@@ -118,6 +118,9 @@ pub struct Snapshot {
     pub faults: Vec<Fault>,
     pub metrics: Metrics,
     pub firmware: Option<firmware::Progress>,
+    /// Newer firmware this device could be updated to (from the daily manifest check).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firmware_update_available: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -147,6 +150,8 @@ pub struct Manager {
     /// Locks set at runtime (web page or API), persisted in `$VOLOO_HOME/locks.json`.
     runtime_locks: Mutex<std::collections::BTreeSet<Uid>>,
     admission: Arc<Mutex<Admission>>,
+    /// Latest firmware manifest from the background check (None until one is read).
+    update_manifest: Mutex<Option<firmware::Manifest>>,
 }
 
 impl Manager {
@@ -162,6 +167,7 @@ impl Manager {
             threads: Mutex::new(Vec::new()),
             runtime_locks: Mutex::new(load_locks()),
             admission: Arc::new(Mutex::new(Admission::default())),
+            update_manifest: Mutex::new(None),
         });
         let tx = manager.events.clone();
         recorder.set_listener(Box::new(move |kind, fault| {
@@ -289,6 +295,7 @@ impl Manager {
                     faults: Vec::new(),
                     metrics: Metrics::default(),
                     firmware: None,
+                    firmware_update_available: None,
                 })),
                 tx: None,
                 alive: Arc::new(AtomicBool::new(false)),
@@ -459,7 +466,12 @@ impl Manager {
         Ok(())
     }
 
+    pub fn set_update_manifest(&self, manifest: firmware::Manifest) {
+        *self.update_manifest.lock().unwrap() = Some(manifest);
+    }
+
     pub fn devices(&self) -> Vec<Snapshot> {
+        let manifest = self.update_manifest.lock().unwrap().clone();
         let entries = self.entries.lock().unwrap();
         entries
             .values()
@@ -471,6 +483,12 @@ impl Manager {
                 s.faults = self
                     .recorder
                     .relevant(&s.uid.to_string(), Duration::from_secs(600));
+                s.firmware_update_available = match (&manifest, &s.identity, s.online) {
+                    (Some(m), Some(id), true) => {
+                        firmware::update_available(m, &id.hardware_version, &id.firmware_version)
+                    }
+                    _ => None,
+                };
                 s
             })
             .collect()

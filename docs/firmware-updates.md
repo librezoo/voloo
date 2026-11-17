@@ -36,6 +36,16 @@ In `voloo ui`, open device details under **USB firmware**. Hold **Update firmwar
 for an online update, or select the matching local file. The dashboard displays
 progress and the result in English, Simplified Chinese or Traditional Chinese.
 
+## Update notices
+
+Once a day at most, the background process reads the public firmware manifest (one small
+GET; nothing about you or your devices is sent) and notes which connected devices could be
+updated. `voloo ls`, `voloo status` and `voloo info` then print one line in a terminal, once
+per device and version; JSON, MCP and piped output stay unchanged apart from a read-only
+`firmware_update_available` field, and the dashboard shows the version in the USB firmware
+panel. Nothing is ever installed automatically. Turn it off with `check_updates = false` in
+`config.toml` or `VOLOO_NO_UPDATE_CHECK=1`.
+
 ## During and after updating
 
 Keep USB power stable. **Do not stop the daemon during a firmware operation.**

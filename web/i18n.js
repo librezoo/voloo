@@ -27,6 +27,7 @@ const messages = {
   "Switch off and confirm VOUT ≤ 1 V before updating.": ["升级前请关闭输出，并确认 VOUT ≤ 1 V。", "更新前請關閉輸出，並確認 VOUT ≤ 1 V。"],
   "First A/B installation replaces the boot program. Keep USB connected.": ["首次安装 A/B 会更新启动程序，请保持 USB 供电。", "首次安裝 A/B 會更新啟動程式，請保持 USB 供電。"],
   "The background service reconnects and verifies the device. Output stays off.": ["后台服务会自动恢复连接并验证设备，输出保持关闭。", "背景服務會自動恢復連線並驗證裝置，輸出保持關閉。"],
+  "Firmware update available": ["有可用的固件更新", "有可用的韌體更新"],
   "Previous firmware": ["可回滚固件", "可回復的韌體"],
   "No previous firmware is available.": ["当前没有可回滚的固件。", "目前沒有可回復的韌體。"],
   "updated firmware": ["已升级固件", "已更新韌體"],
