@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "product": "voloo-switch-x035",
+  "channel": "stable",
+  "firmware": [
+    {
+      "version": "3.3",
+      "code": 771,
+      "released": "2026-11-17",
+      "sha256": "9e266fbc5804c0f699b652c2f72fb7e4f37a5daf09d4f878befc87bdc01b2297",
+      "size": 194096,
+      "hardware": [
+        "0.2"
+      ],
+      "min_host": "0.7.4",
+      "urls": [
+        "https://voloo.librezoo.com/firmware/x035/voloo-switch-x035-3.3.voloofw",
+        "https://github.com/librezoo/voloo/releases/download/v0.7.3/voloo-switch-x035.voloofw"
+      ]
+    }
+  ]
+}
