@@ -303,7 +303,11 @@ fn update_notice(ctx: &Ctx, only_uid: Option<&str>) {
         return;
     };
     if let Ok(rows) = client.call("GET", "/v1/devices", None) {
-        for line in voloo::updatecheck::notices(&rows, only_uid) {
+        let host = client
+            .call("GET", "/v1/health", None)
+            .ok()
+            .and_then(|h| h["host_update_available"].as_str().map(str::to_string));
+        for line in voloo::updatecheck::notices(&rows, host.as_deref(), only_uid) {
             eprintln!("{line}");
         }
     }

@@ -121,6 +121,9 @@ pub struct Snapshot {
     /// Newer firmware this device could be updated to (from the daily manifest check).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub firmware_update_available: Option<String>,
+    /// A newer firmware exists but needs a newer host: `{version, min_host}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firmware_update_needs_host: Option<Value>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -296,6 +299,7 @@ impl Manager {
                     metrics: Metrics::default(),
                     firmware: None,
                     firmware_update_available: None,
+                    firmware_update_needs_host: None,
                 })),
                 tx: None,
                 alive: Arc::new(AtomicBool::new(false)),
@@ -470,6 +474,11 @@ impl Manager {
         *self.update_manifest.lock().unwrap() = Some(manifest);
     }
 
+    /// Newest published host version when this one is older (from the daily check).
+    pub fn host_update_available(&self) -> Option<String> {
+        firmware::host_update_available(self.update_manifest.lock().unwrap().as_ref()?)
+    }
+
     pub fn devices(&self) -> Vec<Snapshot> {
         let manifest = self.update_manifest.lock().unwrap().clone();
         let entries = self.entries.lock().unwrap();
@@ -486,6 +495,19 @@ impl Manager {
                 s.firmware_update_available = match (&manifest, &s.identity, s.online) {
                     (Some(m), Some(id), true) => {
                         firmware::update_available(m, &id.hardware_version, &id.firmware_version)
+                    }
+                    _ => None,
+                };
+                s.firmware_update_needs_host = match (&manifest, &s.identity, s.online) {
+                    (Some(m), Some(id), true) if s.firmware_update_available.is_none() => {
+                        firmware::update_needs_newer_host(
+                            m,
+                            &id.hardware_version,
+                            &id.firmware_version,
+                        )
+                        .map(
+                            |(version, min_host)| json!({"version": version, "min_host": min_host}),
+                        )
                     }
                     _ => None,
                 };

@@ -954,6 +954,13 @@ pub struct Manifest {
     schema: u32,
     product: String,
     firmware: Vec<ManifestEntry>,
+    /// Newest published host (npm) version, for the quiet upgrade hint. Optional.
+    #[serde(default)]
+    host: Option<ManifestHost>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ManifestHost {
+    pub latest: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ManifestEntry {
@@ -1030,15 +1037,46 @@ fn version_code(text: &str) -> Option<u16> {
     let (a, b) = text.split_once('.')?;
     Some((a.parse::<u16>().ok()? << 8) | b.parse::<u16>().ok()?)
 }
+fn semver(text: &str) -> Option<[u64; 3]> {
+    let mut parts = text.split('.').map(|p| p.parse::<u64>().ok());
+    Some([parts.next()??, parts.next()??, parts.next()??])
+}
 fn host_at_least(min: &str) -> bool {
-    let parse = |text: &str| -> Option<[u64; 3]> {
-        let mut parts = text.split('.').map(|p| p.parse::<u64>().ok());
-        Some([parts.next()??, parts.next()??, parts.next()??])
-    };
-    match (parse(env!("CARGO_PKG_VERSION")), parse(min)) {
+    match (semver(env!("CARGO_PKG_VERSION")), semver(min)) {
         (Some(host), Some(min)) => host >= min,
         _ => false,
     }
+}
+/// The newest published host version when it is newer than this one.
+pub fn host_update_available(manifest: &Manifest) -> Option<String> {
+    let latest = &manifest.host.as_ref()?.latest;
+    match (semver(env!("CARGO_PKG_VERSION")), semver(latest)) {
+        (Some(current), Some(newest)) if newest > current => Some(latest.clone()),
+        _ => None,
+    }
+}
+/// A firmware newer than the device runs exists but needs a newer host than this one:
+/// `(firmware version, minimum host)` of the newest such entry.
+pub fn update_needs_newer_host(
+    manifest: &Manifest,
+    hardware: &str,
+    firmware: &str,
+) -> Option<(String, String)> {
+    let current = version_code(firmware)?;
+    let newer: Vec<&ManifestEntry> = manifest
+        .firmware
+        .iter()
+        .filter(|e| {
+            e.hardware.iter().any(|h| h == hardware)
+                && version_code(&e.version) == Some(e.code)
+                && e.code > current
+        })
+        .collect();
+    if newer.iter().any(|e| host_at_least(&e.min_host)) {
+        return None;
+    }
+    let best = newer.into_iter().max_by_key(|e| e.code)?;
+    Some((best.version.clone(), best.min_host.clone()))
 }
 fn select_entry<'a>(
     manifest: &'a Manifest,
@@ -1609,6 +1647,7 @@ mod manifest_tests {
             schema: 1,
             product: MANIFEST_PRODUCT.into(),
             firmware,
+            host: None,
         }
     }
     #[test]
@@ -1657,6 +1696,30 @@ mod manifest_tests {
         ] {
             assert!(!allowed_package_url(bad), "{bad}");
         }
+    }
+    #[test]
+    fn host_hints_and_blocked_firmware() {
+        let mut m = manifest(vec![entry("3.4", &["0.2"], "99.0.0")]);
+        assert_eq!(
+            update_needs_newer_host(&m, "0.2", "3.3"),
+            Some(("3.4".into(), "99.0.0".into()))
+        );
+        assert_eq!(update_available(&m, "0.2", "3.3"), None);
+        m.firmware.push(entry("3.3", &["0.2"], "0.0.1"));
+        assert_eq!(
+            update_needs_newer_host(&m, "0.2", "3.2"),
+            None,
+            "a usable newer entry exists"
+        );
+        assert_eq!(host_update_available(&m), None, "no host field");
+        m.host = Some(ManifestHost {
+            latest: "99.0.0".into(),
+        });
+        assert_eq!(host_update_available(&m), Some("99.0.0".into()));
+        m.host = Some(ManifestHost {
+            latest: "0.0.1".into(),
+        });
+        assert_eq!(host_update_available(&m), None, "not newer");
     }
     #[test]
     fn host_version_comparison_is_numeric() {
