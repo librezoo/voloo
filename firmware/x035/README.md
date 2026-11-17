@@ -7,5 +7,5 @@ authenticates them, the manifest only says which one fits which hardware and hos
 
 To publish a firmware: copy the package here, add an entry (`version`, `code` = major<<8|minor,
 `sha256`, `size`, `hardware`, `min_host`, two `urls`: website first, GitHub release second),
-build the site (`website/build.py`) and deploy it. To withdraw one, remove its entry and redeploy.
+build and deploy the site from [librezoo/voloo-site](https://github.com/librezoo/voloo-site) (`VOLOO_REPO` pointing at this repository). To withdraw one, remove its entry and redeploy.
 Never edit an entry's package in place; add a new version.
