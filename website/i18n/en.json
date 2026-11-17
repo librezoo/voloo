@@ -241,7 +241,6 @@
   "过压后输出仍关闭": "Still OFF after an overvoltage event?",
   "过压锁定解除不会自动重新供电。回到 3.3–28 V 并检查接线、限流后，重新发出开启指令；不需要额外过压复位命令。": "Clearing the overvoltage latch does not restore power automatically. Return to 3.3–28 V, check wiring and current limits, then send a new ON command. No extra overvoltage reset is needed.",
   "完整中文说明": "Full user guide",
-  "上位机开源仓库": "Host software source",
   "端子厂家图纸": "Terminal manufacturer drawing",
   "产品外观为 AI 辅助效果渲染；操作图为结构示意。实际接线以实物标识为准。": "Product appearance is an AI-assisted rendering; operation diagrams are schematic. Follow the physical markings when wiring.",
   "voloo 红正黑负接线示意，AI 辅助产品效果图": "voloo rendering with red positive and black negative wiring",
@@ -353,5 +352,6 @@
   "安装遇到权限问题？": "Install permission problem?",
   "# Node 18+ · 安装或更新到最新版": "# Node 18+ · Install or update to the latest version",
   "# 已装过旧版？更新后重启后台程序": "# Already installed? After updating, restart the background process",
-  "开源 Apache-2.0": "Open source: Apache-2.0"
+  "开源 Apache-2.0": "Open source: Apache-2.0",
+  "开源仓库": "Source code"
 }

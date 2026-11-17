@@ -48,7 +48,7 @@ for y,title,body in [(540,'1  Supply A to IN / SOURCE','Set voltage and current 
  text(x,y,title,11,bold=True);para(x,y-12,CW-285,body,9.5)
 box(M,292,CW,34,fill='#f5f1e9');text(M+12,304,'Red to +',11,'#b92c32',True);text(M+113,304,'Black to -',11,'#252026',True);text(M+221,304,'Check polarity and the markings on your unit.',9,'#65545f')
 text(M,270,'Install and open',15,bold=True);text(M+145,270,'Node.js 18+  |  nodejs.org',9,'#65545f')
-box(M,215,CW,42,fill='#241622',stroke='#241622');text(M+14,231,'npm install -g @librezoo/voloo',11,'#fffdf8',font='Courier')
+box(M,215,CW,42,fill='#241622',stroke='#241622');text(M+14,231,'npm install -g @librezoo/voloo@latest',11,'#fffdf8',font='Courier')
 box(M,173,CW,33,fill='#f5f1e9');text(M+14,185,'voloo ui',11,font='Courier')
 text(M,150,'Switch on for the first time',14,bold=True)
 para(M,138,CW-84,'1. Connect only the target voloo. Confirm it appears in the dashboard and its output is OFF.',9.5)
