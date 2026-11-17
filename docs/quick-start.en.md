@@ -34,7 +34,7 @@ To remove a wire, disconnect all power, hold the matching orange tab and gently 
 Install Node.js 18 or newer (current LTS recommended), then run:
 
 ```sh
-npm install -g @librezoo/voloo
+npm install -g @librezoo/voloo@latest
 voloo ui
 ```
 

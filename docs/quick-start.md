@@ -34,7 +34,7 @@
 电脑先安装 [Node.js](https://nodejs.org/) 18 或更新版本，再在终端执行：
 
 ```sh
-npm install -g @librezoo/voloo
+npm install -g @librezoo/voloo@latest
 voloo ui
 ```
 
