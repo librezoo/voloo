@@ -1600,3 +1600,32 @@ fn idle_shutdown_waits_for_cycle_activity_and_requires_authentication() {
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+
+/// A request body that arrives after the daemon has answered must not turn the reply into
+/// a TCP reset: the rollback handler used to ignore its body, so macOS reported
+/// "Connection reset by peer" even though the rollback had completed.
+#[test]
+fn rollback_reply_survives_a_late_request_body() {
+    // No A/B support on the simulated device: the handler answers at once with an error,
+    // which is exactly when an unread body used to reset the connection.
+    let rig = Rig::new("", 600);
+    rig.ready();
+    let info = rig.info().unwrap();
+    for delay_ms in [20u64, 50, 100, 200, 20, 50, 100, 200] {
+        let mut s = TcpStream::connect(("127.0.0.1", info.port)).unwrap();
+        let head = format!(
+            "POST /v1/devices/{UID_A}/firmware/rollback HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n",
+            info.port, info.token
+        );
+        s.write_all(head.as_bytes()).unwrap();
+        std::thread::sleep(Duration::from_millis(delay_ms));
+        let _ = s.write_all(b"{}");
+        let mut out = String::new();
+        s.read_to_string(&mut out)
+            .unwrap_or_else(|e| panic!("reply lost after {delay_ms} ms body delay: {e}"));
+        assert!(
+            out.starts_with("HTTP/1.1 200") || out.contains(" 4"),
+            "{out}"
+        );
+    }
+}
