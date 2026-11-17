@@ -1,8 +1,8 @@
 # MCP client compatibility
 
-Checked on 2026-11-15 on macOS arm64, with installed Voloo host
+Checked on 2026-11-15 on macOS arm64, with installed voloo
 `0.7.0-rc.6` and one USB-C X035 board running firmware `2.7`. These
-cross-client results describe that setup. A separate host run also verified all
+cross-client results describe that setup. A separate run also verified all
 five tools through Codex against firmware `3.0`; the OpenCode and VS Code
 evidence below remains limited to firmware `2.7`.
 Client versions and test depth matter: a valid configuration is not evidence
