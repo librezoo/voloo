@@ -1049,12 +1049,12 @@ fn select_entry<'a>(
         .collect();
     let Some(best) = usable.iter().copied().max_by_key(|e| e.code) else {
         return Err(invalid(
-            "A newer firmware exists but needs a newer host; run `npm install -g @librezoo/voloo@latest`, then `voloo daemon stop`, and retry",
+            "A newer firmware exists but needs a newer voloo; run `npm install -g @librezoo/voloo@latest`, then `voloo daemon stop`, and retry",
         ));
     };
     if best.code < current {
         return Err(invalid(
-            "The device already runs newer firmware than the newest published for this host",
+            "The device already runs newer firmware than the newest published for this version of voloo",
         ));
     }
     Ok(best)
@@ -1615,7 +1615,7 @@ mod manifest_tests {
             select_entry(&future, "0.2", 0x302)
                 .unwrap_err()
                 .message
-                .contains("newer host")
+                .contains("newer voloo")
         );
     }
     #[test]
