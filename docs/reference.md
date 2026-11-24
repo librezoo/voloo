@@ -22,6 +22,7 @@ always need it.
 
 | Command | Effect |
 | --- | --- |
+| `voloo completions bash\|zsh\|fish\|powershell` | Print a [shell completion script](../README.md#tab-completion) |
 | `voloo ls` | Connected voloo devices with state and active faults |
 | `voloo status [DEV]` / `info` / `diag --kind communication\|adc\|fast` | Read-only |
 | `voloo on DEV` / `off DEV` / `discharge DEV` | Switch and confirm by status |

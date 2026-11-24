@@ -338,7 +338,7 @@ pub struct Span {
     pub rx_hex: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum Level {
     Info,

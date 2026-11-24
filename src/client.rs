@@ -100,10 +100,12 @@ impl Client {
         timeout: Duration,
     ) -> Result<(u16, Value), SendError> {
         let addr = SocketAddr::from(([127, 0, 0, 1], self.info.port));
-        let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2))
+        let mut stream = TcpStream::connect_timeout(&addr, timeout.min(Duration::from_secs(2)))
             .map_err(|e| SendError::NotConnected(e.to_string()))?;
         stream.set_read_timeout(Some(timeout)).ok();
-        stream.set_write_timeout(Some(Duration::from_secs(5))).ok();
+        stream
+            .set_write_timeout(Some(timeout.min(Duration::from_secs(5))))
+            .ok();
         let payload = body.map(|b| b.to_string()).unwrap_or_default();
         let head = format!(
             "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nX-Voloo-Source: {source}\r\nAccept: application/json\r\nConnection: close\r\n{ctype}Content-Length: {len}\r\n\r\n",

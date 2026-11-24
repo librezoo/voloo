@@ -233,6 +233,42 @@ fn raw_request(port: u16, head: &str) -> (u16, String) {
 }
 
 #[test]
+fn completion_offers_live_device_targets_without_performing_operations() {
+    let rig = Rig::new("", 600);
+    let complete_info = |prefix| {
+        let out = rig.cmd(&["__complete", prefix, "info"]).output().unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap()
+    };
+
+    let offline = complete_info("=");
+    assert!(!offline.contains("bench-a"));
+    assert!(rig.info().is_none(), "completion must not start the daemon");
+
+    rig.ready();
+    let all = complete_info("=");
+    assert!(all.lines().any(|v| v == "bench-a"), "{all}");
+    assert!(all.lines().any(|v| v == UID_A), "{all}");
+    assert!(all.lines().any(|v| v == UID_B), "{all}");
+    assert_eq!(complete_info("=bench-"), "bench-a\n");
+    assert!(
+        rig.sims
+            .iter()
+            .all(|s| s.state.lock().unwrap().writes.is_empty())
+    );
+
+    assert_eq!(rig.run(&["name", UID_B, "bench-a"]).0, 0);
+    assert!(
+        complete_info("=bench-").is_empty(),
+        "duplicate nicknames are ambiguous"
+    );
+}
+
+#[test]
 fn autostart_cli_http_and_auth() {
     let rig = Rig::new("", 600);
     rig.ready();

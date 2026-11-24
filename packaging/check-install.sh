@@ -13,7 +13,9 @@ check() { # $1 = label, $2 = voloo command
   home="$WORK/home-$label"; mkdir -p "$home"
   run() { VOLOO_HOME="$home" VOLOO_DEMO=2 VOLOO_SCAN_USB=0 $voloo "$@"; }
   echo "== $label: $($voloo --version)"
+  run completions bash | grep -q '^complete .* voloo$'
   run --json ls | "$PY" -c 'import json,sys; d=json.load(sys.stdin); assert [x["port"] for x in d]==["sim://1","sim://2"], d; print("ls ok:", len(d), "demo devices")'
+  run __complete '=bench-' info | grep -qx 'bench-a'
   run --json on bench-a | "$PY" -c 'import json,sys; d=json.load(sys.stdin); assert d["outcome"]=="completed", d; print("on ok")'
   printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"check","version":"1"}}}' \
     '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | run mcp | "$PY" -c 'import json,sys; r=[json.loads(l) for l in sys.stdin]; assert r[0]["result"]["serverInfo"]["name"]=="voloo"; print("mcp ok:", len(r[1]["result"]["tools"]), "tools")'

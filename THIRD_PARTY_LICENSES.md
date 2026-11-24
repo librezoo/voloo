@@ -20,6 +20,7 @@ alternative applies). `serialport` is MPL-2.0; it is used unmodified.
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 | https://github.com/rust-lang/cfg-if |
 | clap | 4.6.7 | MIT OR Apache-2.0 | https://github.com/clap-rs/clap |
 | clap_builder | 4.6.7 | MIT OR Apache-2.0 | https://github.com/clap-rs/clap |
+| clap_complete | 4.6.12 | MIT OR Apache-2.0 | https://github.com/clap-rs/clap |
 | clap_derive | 4.6.7 | MIT OR Apache-2.0 | https://github.com/clap-rs/clap |
 | clap_lex | 1.1.1 | MIT OR Apache-2.0 | https://github.com/clap-rs/clap |
 | colorchoice | 1.0.5 | MIT OR Apache-2.0 | https://github.com/rust-cli/anstyle.git |
@@ -43,6 +44,7 @@ alternative applies). `serialport` is MPL-2.0; it is used unmodified.
 | hyper-util | 0.1.21 | MIT | https://github.com/hyperium/hyper-util |
 | io-kit-sys | 0.4.1 | MIT / Apache-2.0 | https://github.com/jtakakura/io-kit-rs |
 | is_terminal_polyfill | 1.70.2 | MIT OR Apache-2.0 | https://github.com/polyfill-rs/is_terminal_polyfill |
+| is_executable | 1.0.6 | MIT OR Apache-2.0 | https://github.com/fitzgen/is_executable |
 | itoa | 1.0.18 | MIT OR Apache-2.0 | https://github.com/dtolnay/itoa |
 | libc | 0.2.191 | MIT OR Apache-2.0 | https://github.com/rust-lang/libc |
 | libudev | 0.3.0 | MIT | https://github.com/dcuddeback/libudev-rs |

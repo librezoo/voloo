@@ -60,6 +60,24 @@ voloo ls
 If npm reports a permission error (EACCES), do not use `sudo`; see the
 [install help](https://voloo.librezoo.com/#start) on the website.
 
+### Tab completion
+
+Run the line for your shell. To enable completion in new terminals, add the
+same line to your shell startup file.
+
+| Shell | Enable in the current session | Startup file |
+| --- | --- | --- |
+| Bash | `eval "$(voloo completions bash)"` | `~/.bashrc` (`~/.bash_profile` for login shells) |
+| Zsh | `source <(voloo completions zsh)` | `~/.zshrc` |
+| Fish | `voloo completions fish \| source` | `~/.config/fish/config.fish` |
+| PowerShell | `voloo completions powershell \| Out-String \| Invoke-Expression` | `$PROFILE` |
+
+Try `voloo firmware ` then Tab for subcommands, or `voloo diag --kind ` then
+Tab for available values. Run `voloo ls`, then type `voloo info ` and press Tab
+to see online device UIDs and unambiguous nicknames from the running background
+process. Nickname completion accepts letters, numbers, spaces, `-`, `_` and `.`.
+Use PowerShell or Git Bash on Windows for programmable completion.
+
 ## Quick start
 
 ```sh

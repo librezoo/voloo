@@ -47,6 +47,19 @@ voloo demo
 
 `demo` 使用模拟设备，不扫描或控制真实硬件。退出演示不会切换真实设备的供电。
 
+### 开启 Tab 补全
+
+在当前终端运行对应命令，或者把同一行加入 Shell 启动配置，以便新终端自动加载。
+
+| Shell | 启用命令 |
+| --- | --- |
+| Bash | `eval "$(voloo completions bash)"` |
+| Zsh | `source <(voloo completions zsh)` |
+| Fish | `voloo completions fish \| source` |
+| PowerShell | `voloo completions powershell \| Out-String \| Invoke-Expression` |
+
+运行 `voloo ls` 后，输入 `voloo info `（末尾空格）再按 Tab，即可选在线设备的完整 UID 或唯一昵称。也可以在 `voloo firmware ` 后补子命令，在 `voloo diag --kind ` 后补参数值。含特殊符号的昵称可用完整 UID 补全。Windows 可使用 PowerShell 或 Git Bash。
+
 ## 2 接线和上电
 
 准备一根**支持数据传输**的 USB 线。只支持充电的线不能用于通信；电脑一端可以是 USB-A 或 USB-C。

@@ -1,5 +1,8 @@
 #![allow(clippy::result_large_err)] // see lib.rs
-use clap::{Parser, Subcommand};
+mod completion;
+
+use clap::{Parser, Subcommand, ValueHint};
+use clap_complete::ArgValueCandidates;
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -35,7 +38,13 @@ struct Cli {
     #[arg(long, global = true)]
     port: Option<String>,
     /// Log level for direct mode: info (default), debug (adds raw frames) or trace.
-    #[arg(long, global = true, env = "VOLOO_LOG_LEVEL", default_value = "info")]
+    #[arg(
+        long,
+        global = true,
+        env = "VOLOO_LOG_LEVEL",
+        default_value = "info",
+        value_enum
+    )]
     log_level: Level,
     #[command(subcommand)]
     command: Cmd,
@@ -53,23 +62,40 @@ enum Cmd {
     /// List connected Voloo devices with their state.
     Ls,
     /// Read fresh state (DEVICE: UID or nickname; optional with one device).
-    Status { device: Option<String> },
+    Status {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: Option<String>,
+    },
     /// Identity, versions, capabilities and nickname.
-    Info { device: Option<String> },
+    Info {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: Option<String>,
+    },
     /// Diagnostic registers.
     Diag {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
         device: Option<String>,
         #[arg(long, default_value = "communication", value_parser = ["communication", "adc", "fast"])]
         kind: String,
     },
     /// Turn the output ON and confirm it.
-    On { device: String },
+    On {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: String,
+    },
     /// Turn the output OFF (does not discharge the load).
-    Off { device: String },
+    Off {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: String,
+    },
     /// Turn OFF and actively discharge until VOUT <= 1 V is confirmed.
-    Discharge { device: String },
+    Discharge {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: String,
+    },
     /// OFF (discharge by default), wait, then ON. Stops at the first failure.
     Cycle {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
         device: String,
         #[arg(long, default_value_t = 1000, value_parser = clap::value_parser!(u64).range(0..=30000))]
         off_ms: u64,
@@ -78,9 +104,14 @@ enum Cmd {
         no_discharge: bool,
     },
     /// Set (or clear with "") the persistent nickname. Requires the output fully OFF.
-    Name { device: String, nickname: String },
+    Name {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: String,
+        nickname: String,
+    },
     /// Faults from the event log: active conditions and events of the last 24 h by default.
     Faults {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
         device: Option<String>,
         /// Include cleared conditions and older events.
         #[arg(long)]
@@ -112,9 +143,15 @@ enum Cmd {
         no_open: bool,
     },
     /// Refuse every power or nickname change to a device, from any client.
-    Lock { device: String },
+    Lock {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: String,
+    },
     /// Lift a lock set with `voloo lock` or from the web page.
-    Unlock { device: String },
+    Unlock {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: String,
+    },
     /// MCP server on stdio for AI agents (relays to the background process).
     Mcp,
     /// Try the dashboard with simulated devices: separate home, no hardware touched.
@@ -138,28 +175,49 @@ enum Cmd {
         #[command(subcommand)]
         action: DaemonCmd,
     },
+    /// Print a shell script that enables Tab completion.
+    Completions { shell: completion::Shell },
+    #[command(name = "__complete", hide = true)]
+    Complete {
+        // The shell prefixes the current word with '=' so even an empty word
+        // survives forwarding by older PowerShell. Everything after that word
+        // is literal CLI input; the npm PowerShell shim consumes a bare '--'.
+        #[arg(trailing_var_arg = true, required = true)]
+        words: Vec<std::ffi::OsString>,
+    },
 }
 
 #[derive(Subcommand)]
 enum FirmwareCmd {
     /// Inspect a distributable firmware package offline; never opens a device.
-    Inspect { file: std::path::PathBuf },
+    Inspect {
+        #[arg(value_hint = ValueHint::FilePath)]
+        file: std::path::PathBuf,
+    },
     /// Download paired encrypted firmware automatically, or use a local FILE; verify and confirm.
     ///
     /// Without a DEVICE: the only connected Voloo, or with several the ones that have an
     /// update (listed first; asks to confirm in a terminal, or pass --all). Skipped, never
     /// aborted: up to date, locked, not idle OFF.
     Update {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
         device: Option<String>,
+        #[arg(value_hint = ValueHint::FilePath)]
         file: Option<std::path::PathBuf>,
         /// Update every connected Voloo that has an update, without asking.
         #[arg(long, conflicts_with_all = ["device", "file"])]
         all: bool,
     },
     /// Trial-boot the previous A/B firmware; verify it before confirming rollback.
-    Rollback { device: String },
+    Rollback {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: String,
+    },
     /// Read USB update support, current slot, previous firmware and trial state.
-    Status { device: String },
+    Status {
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
+        device: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -199,6 +257,8 @@ fn main() -> ExitCode {
         }
     };
     match cli.command {
+        Cmd::Completions { shell } => return completion::register(shell),
+        Cmd::Complete { words } => return completion::suggest(words),
         Cmd::Daemon {
             action: DaemonCmd::Run,
         } => {
@@ -983,7 +1043,11 @@ fn run(ctx: &Ctx, cmd: Cmd) -> Result<u8, OpError> {
             }
             DaemonCmd::Run => unreachable!(),
         },
-        Cmd::Mcp | Cmd::DevSim { .. } | Cmd::Demo { .. } => unreachable!(),
+        Cmd::Mcp
+        | Cmd::DevSim { .. }
+        | Cmd::Demo { .. }
+        | Cmd::Completions { .. }
+        | Cmd::Complete { .. } => unreachable!(),
     }
     Ok(0)
 }
