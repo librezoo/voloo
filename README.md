@@ -132,7 +132,7 @@ node --test packaging/npm/publish.test.mjs tests/web.test.mjs
 | `web/` | The dashboard (static files served by the program) |
 | `tests/` | Integration tests with a simulated device |
 | `packaging/` | npm and PyPI packaging |
-| `firmware/x035/` | Published firmware manifest and encrypted package |
+| `firmware/x035/` | Firmware manifest and GitHub Release publishing instructions |
 
 Other languages integrate through the HTTP API, `--json` or MCP rather than separate
 SDKs. Commits follow [Conventional Commits](https://www.conventionalcommits.org/)

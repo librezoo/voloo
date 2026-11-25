@@ -4,3 +4,9 @@
 
 /output/
 /.playwright-cli/
+
+# Device firmware images are distributed as GitHub Release assets.
+*.voloofw
+/firmware/**/*.bin
+/firmware/**/*.hex
+/firmware/**/*.elf
