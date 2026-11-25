@@ -42,11 +42,12 @@ mkdirSync(join(mainDir, 'bin'), { recursive: true });
 copyFileSync(join(root, 'packaging', 'npm', 'voloo', 'bin', 'voloo.js'), join(mainDir, 'bin', 'voloo.js'));
 chmodSync(join(mainDir, 'bin', 'voloo.js'), 0o755);
 copyFileSync(join(root, 'README.md'), join(mainDir, 'README.md'));
+copyFileSync(join(root, 'docs', 'assets', 'taobao-poster.png'), join(mainDir, 'taobao-poster.png'));
 copyFileSync(join(root, 'LICENSE'), join(mainDir, 'LICENSE'));
 writeFileSync(join(mainDir, 'package.json'), JSON.stringify({
   name: '@librezoo/voloo', ...common,
   bin: { voloo: 'bin/voloo.js' },
-  files: ['bin', 'README.md'],
+  files: ['bin', 'README.md', 'taobao-poster.png'],
   engines: { node: '>=18' },
   keywords: ['voloo', 'librezoo', 'power', 'usb', 'mcp', 'ai-agent'],
   optionalDependencies: Object.fromEntries(targets.map((t) => [`@librezoo/voloo-${t}`, version])),

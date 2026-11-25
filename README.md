@@ -34,6 +34,12 @@ needed on macOS, Linux or Windows 10/11.
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
+## Get the hardware
+
+[Buy the voloo Switch on Taobao · 淘宝购买](https://item.taobao.com/item.htm?id=1100678463979), or scan the code in the Taobao app.
+
+<a href="https://item.taobao.com/item.htm?id=1100678463979"><img src="https://raw.githubusercontent.com/librezoo/voloo/main/docs/assets/taobao-poster.png" alt="Voloo Switch Taobao purchase QR code · 手机淘宝扫码购买" width="320"></a>
+
 ## Install
 
 Requires Node.js 18 or newer.
