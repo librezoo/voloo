@@ -72,10 +72,13 @@ same line to your shell startup file.
 | Fish | `voloo completions fish \| source` | `~/.config/fish/config.fish` |
 | PowerShell | `voloo completions powershell \| Out-String \| Invoke-Expression` | `$PROFILE` |
 
-Try `voloo firmware ` then Tab for subcommands, or `voloo diag --kind ` then
-Tab for available values. Run `voloo ls`, then type `voloo info ` and press Tab
-to see online device UIDs and unambiguous nicknames from the running background
-process. Nickname completion accepts letters, numbers, spaces, `-`, `_` and `.`.
+Try `voloo firmware update ` then Tab for a device UID, nickname, or `--all`.
+After a device, Tab completes the local firmware file path. `voloo firmware inspect `
+also completes paths. Tab after `voloo diag --kind ` offers the allowed values.
+Run `voloo ls` to populate device nicknames for completion. Nickname completion
+accepts letters, numbers, spaces, `-`, `_` and `.`.
+Complete serial ports with `--port`, log UIDs with `voloo log --uid ` and recent
+transaction IDs with `voloo trace `.
 Use PowerShell or Git Bash on Windows for programmable completion.
 
 ## Quick start

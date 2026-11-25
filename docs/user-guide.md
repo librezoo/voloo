@@ -60,6 +60,8 @@ voloo demo
 
 运行 `voloo ls` 后，输入 `voloo info `（末尾空格）再按 Tab，即可选在线设备的完整 UID 或唯一昵称。也可以在 `voloo firmware ` 后补子命令，在 `voloo diag --kind ` 后补参数值。含特殊符号的昵称可用完整 UID 补全。Windows 可使用 PowerShell 或 Git Bash。
 
+输入 `voloo firmware update ` 后按 Tab，可以补设备或 `--all`。选定设备后，再按 Tab 补本地固件路径。`voloo firmware inspect ` 也支持路径补全。`--port`、`voloo log --uid ` 和 `voloo trace ` 分别可补串口、UID 和近期追踪 ID。
+
 ## 2 接线和上电
 
 准备一根**支持数据传输**的 USB 线。只支持充电的线不能用于通信；电脑一端可以是 USB-A 或 USB-C。

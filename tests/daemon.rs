@@ -235,8 +235,11 @@ fn raw_request(port: u16, head: &str) -> (u16, String) {
 #[test]
 fn completion_offers_live_device_targets_without_performing_operations() {
     let rig = Rig::new("", 600);
-    let complete_info = |prefix| {
-        let out = rig.cmd(&["__complete", prefix, "info"]).output().unwrap();
+    let complete = |prefix, args: &[&str]| {
+        let out = rig
+            .cmd(&[&["__complete", prefix], args].concat())
+            .output()
+            .unwrap();
         assert!(
             out.status.success(),
             "{}",
@@ -245,16 +248,35 @@ fn completion_offers_live_device_targets_without_performing_operations() {
         String::from_utf8(out.stdout).unwrap()
     };
 
-    let offline = complete_info("=");
+    let offline = complete("=", &["info"]);
     assert!(!offline.contains("bench-a"));
     assert!(rig.info().is_none(), "completion must not start the daemon");
 
     rig.ready();
-    let all = complete_info("=");
+    let all = complete("=", &["info"]);
     assert!(all.lines().any(|v| v == "bench-a"), "{all}");
     assert!(all.lines().any(|v| v == UID_A), "{all}");
     assert!(all.lines().any(|v| v == UID_B), "{all}");
-    assert_eq!(complete_info("=bench-"), "bench-a\n");
+    for args in [
+        &["info"][..],
+        &["status"],
+        &["diag"],
+        &["on"],
+        &["off"],
+        &["discharge"],
+        &["cycle"],
+        &["name"],
+        &["faults"],
+        &["lock"],
+        &["unlock"],
+        &["firmware", "update"],
+        &["firmware", "status"],
+        &["firmware", "rollback"],
+    ] {
+        assert_eq!(complete("=bench-", args), "bench-a\n", "{args:?}");
+    }
+    assert!(complete("=bench-", &["firmware", "update", "--all"]).is_empty());
+    assert_eq!(complete("=01-", &["log", "--uid"]), format!("{UID_A}\n"));
     assert!(
         rig.sims
             .iter()
@@ -263,7 +285,7 @@ fn completion_offers_live_device_targets_without_performing_operations() {
 
     assert_eq!(rig.run(&["name", UID_B, "bench-a"]).0, 0);
     assert!(
-        complete_info("=bench-").is_empty(),
+        complete("=bench-", &["info"]).is_empty(),
         "duplicate nicknames are ambiguous"
     );
 }

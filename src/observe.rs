@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::{
     collections::{BTreeMap, VecDeque},
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::{
         Mutex,
@@ -747,23 +747,28 @@ impl Recorder {
     }
 }
 
-/// Reads JSONL log records (newest last), optionally filtered by a substring match on uid.
-pub fn read_log(dir: &Path, stem: &str, uid: Option<&str>, limit: usize) -> Vec<Value> {
+fn log_paths(dir: &Path, stem: &str) -> Vec<PathBuf> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
     };
+    let prefix = format!("{stem}-");
     let mut paths: Vec<PathBuf> = entries
         .flatten()
         .map(|e| e.path())
         .filter(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with(&format!("{stem}-")) && n.ends_with(".jsonl"))
+                .is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".jsonl"))
         })
         .collect();
     paths.sort();
+    paths
+}
+
+/// Reads JSONL log records (newest last), optionally filtered by UID.
+pub fn read_log(dir: &Path, stem: &str, uid: Option<&str>, limit: usize) -> Vec<Value> {
     let mut out = VecDeque::new();
-    for path in paths {
+    for path in log_paths(dir, stem) {
         let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
@@ -781,6 +786,35 @@ pub fn read_log(dir: &Path, stem: &str, uid: Option<&str>, limit: usize) -> Vec<
         }
     }
     out.into()
+}
+
+/// Recent persisted records for completion, without loading the log history on Tab.
+pub fn read_log_tail(dir: &Path, stem: &str) -> Vec<Value> {
+    const TAIL_BYTES: u64 = 64 * 1024;
+    let Some(path) = log_paths(dir, stem).pop() else {
+        return Vec::new();
+    };
+    let Ok(metadata) = fs::symlink_metadata(&path) else {
+        return Vec::new();
+    };
+    if !metadata.is_file() {
+        return Vec::new();
+    }
+    let Ok(mut file) = File::open(path) else {
+        return Vec::new();
+    };
+    let start = metadata.len().saturating_sub(TAIL_BYTES);
+    let mut bytes = Vec::new();
+    if file.seek(SeekFrom::Start(start)).is_err()
+        || file.take(TAIL_BYTES).read_to_end(&mut bytes).is_err()
+    {
+        return Vec::new();
+    }
+    bytes
+        .split(|byte| *byte == b'\n')
+        .skip(usize::from(start > 0))
+        .filter_map(|line| serde_json::from_slice(line).ok())
+        .collect()
 }
 
 #[cfg(test)]

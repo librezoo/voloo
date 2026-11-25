@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{fs, process::Command};
 
 #[test]
 fn shell_setup_and_contextual_suggestions_work_offline() {
@@ -7,7 +7,9 @@ fn shell_setup_and_contextual_suggestions_work_offline() {
         let out = Command::new(env!("CARGO_BIN_EXE_voloo"))
             .env("VOLOO_HOME", home.path())
             .env("VOLOO_SCAN_USB", "0")
+            .env("VOLOO_PORTS", "COM4=01-23-45-67-89-AB-CD-EF")
             .env_remove("VOLOO_LOG_LEVEL")
+            .current_dir(home.path())
             .args(args)
             .output()
             .unwrap();
@@ -37,5 +39,54 @@ fn shell_setup_and_contextual_suggestions_work_offline() {
         "trace\n"
     );
     assert!(!run(&["__complete", "="]).contains("__complete"));
+    let suggest = |prefix: &str, words: &[&str]| {
+        let prefix = format!("={prefix}");
+        run(&[&["__complete", prefix.as_str()], words].concat())
+    };
+    assert_eq!(suggest("-h", &[]), "-h\n");
+    assert_eq!(suggest("-V", &[]), "-V\n");
+    assert_eq!(suggest("COM", &["info", "--port"]), "COM4\n");
+    assert_eq!(suggest("--port=COM", &[]), "--port=COM4\n");
+    assert_eq!(suggest("", &["cycle", "bench-a", "--off-ms"]), "1000\n");
+    assert_eq!(suggest("", &["faults", "--limit"]), "50\n");
+    assert_eq!(suggest("", &["log", "--limit"]), "20\n");
+    assert_eq!(
+        suggest("", &["demo", "--count"]),
+        "1\n2\n3\n4\n5\n6\n7\n8\n"
+    );
+
+    let directory = home.path().join("my firmware");
+    fs::create_dir(&directory).unwrap();
+    fs::write(directory.join("new release.voloofw"), []).unwrap();
+    let fw_dir = format!("my firmware{}\n", std::path::MAIN_SEPARATOR);
+    assert_eq!(suggest("my", &["firmware", "inspect"]), fw_dir);
+    let file_prefix = format!("my firmware{}new", std::path::MAIN_SEPARATOR);
+    let file = format!("{file_prefix} release.voloofw\n");
+    assert_eq!(suggest(&file_prefix, &["firmware", "inspect"]), file);
+    assert_eq!(
+        suggest(&file_prefix, &["firmware", "update", "bench-a"]),
+        file
+    );
+    assert_eq!(suggest("--al", &["firmware", "update"]), "--all\n");
+    assert!(suggest("--al", &["firmware", "update", "bench-a"]).is_empty());
+    assert!(suggest(&file_prefix, &["firmware", "update", "--all"]).is_empty());
+    assert_eq!(
+        suggest("tr", &["firmware", "update", "--all", "--log-level"]),
+        "trace\n"
+    );
+
+    let logs = home.path().join("logs");
+    fs::create_dir(&logs).unwrap();
+    fs::write(
+        logs.join("trace-20261125.jsonl"),
+        "{\"trace_id\":\"t123-a-1\",\"uid\":\"01-23-45-67-89-AB-CD-EF\"}\n",
+    )
+    .unwrap();
+    assert_eq!(suggest("t123", &["trace"]), "t123-a-1\n");
+    assert_eq!(
+        suggest("01-", &["log", "--uid"]),
+        "01-23-45-67-89-AB-CD-EF\n"
+    );
+
     assert!(!home.path().join("daemon.json").exists());
 }

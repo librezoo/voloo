@@ -1,5 +1,15 @@
+_voloo_decode_word() {
+    # COMP_WORDS retains quotes and backslashes. Decode common path and
+    # nickname forms as text without expanding anything in the command line.
+    case $1 in
+        \'*) REPLY=${1#\'}; REPLY=${REPLY%\'} ;;
+        \"*) REPLY=${1#\"}; REPLY=${REPLY%\"} ;;
+        *) IFS= read REPLY <<< "$1" ;;
+    esac
+}
+
 _voloo_complete() {
-    local n word previous candidate results replace_prefix=
+    local n word previous candidate results REPLY replace_prefix=
     local -a args=()
     COMPREPLY=()
 
@@ -21,6 +31,8 @@ _voloo_complete() {
                 word=$replace_prefix
             fi
         fi
+        _voloo_decode_word "$word"
+        word=$REPLY
         if (( n < COMP_CWORD )); then
             args+=("$word")
             replace_prefix=
@@ -31,7 +43,8 @@ _voloo_complete() {
     # replaces only the value. Use the Readline word up to the cursor.
     if [[ $word == --*=* && $2 != --*=* && $COMP_WORDBREAKS == *=* ]]; then
         replace_prefix=${word%%=*}=
-        word=$replace_prefix$2
+        _voloo_decode_word "$2"
+        word=$replace_prefix$REPLY
     fi
 
     results=$(command voloo __complete "=$word" "${args[@]}" 2>/dev/null) || return

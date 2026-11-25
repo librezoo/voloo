@@ -1,7 +1,15 @@
 _voloo_complete() {
-    local -a candidates
-    candidates=("${(@f)$(command voloo __complete "=$PREFIX" "${(@)words[2,CURRENT-1]}" 2>/dev/null)}")
-    compadd -a candidates
+    local -a candidates directories values
+    local candidate
+    candidates=("${(@f)$(command voloo __complete "=${(Q)PREFIX}" "${(@Q)words[2,CURRENT-1]}" 2>/dev/null)}")
+    for candidate in "${candidates[@]}"; do
+        case $candidate in
+            */|*\\) directories+=("$candidate") ;;
+            ?*) values+=("$candidate") ;;
+        esac
+    done
+    compadd -S '' -a directories
+    compadd -a values
 }
 
 autoload -Uz compinit

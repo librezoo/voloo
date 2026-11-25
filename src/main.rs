@@ -21,6 +21,11 @@ use voloo::{
     protocol::{Command, Uid},
 };
 
+const CYCLE_OFF_MS: u64 = 1000;
+const FAULTS_LIMIT: usize = 50;
+const LOG_LIMIT: usize = 20;
+const DEMO_COUNTS: std::ops::RangeInclusive<i64> = 1..=8;
+
 /// Control USB-C Voloo Switch devices connected to this computer.
 ///
 /// Voloo switches externally supplied SOURCE power; it is not a power source.
@@ -35,7 +40,7 @@ struct Cli {
     #[arg(long, global = true)]
     direct: bool,
     /// Use this serial port directly (implies --direct; for debugging).
-    #[arg(long, global = true)]
+    #[arg(long, global = true, add = ArgValueCandidates::new(completion::ports))]
     port: Option<String>,
     /// Log level for direct mode: info (default), debug (adds raw frames) or trace.
     #[arg(
@@ -97,7 +102,8 @@ enum Cmd {
     Cycle {
         #[arg(add = ArgValueCandidates::new(completion::devices))]
         device: String,
-        #[arg(long, default_value_t = 1000, value_parser = clap::value_parser!(u64).range(0..=30000))]
+        #[arg(long, default_value_t = CYCLE_OFF_MS, value_parser = clap::value_parser!(u64).range(0..=30000),
+              add = ArgValueCandidates::new(|| vec![CYCLE_OFF_MS.to_string().into()]))]
         off_ms: u64,
         /// Plain OFF instead of a confirmed discharge.
         #[arg(long)]
@@ -116,7 +122,8 @@ enum Cmd {
         /// Include cleared conditions and older events.
         #[arg(long)]
         all: bool,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = FAULTS_LIMIT,
+              add = ArgValueCandidates::new(|| vec![FAULTS_LIMIT.to_string().into()]))]
         limit: usize,
     },
     /// Recent records from the logs.
@@ -124,13 +131,17 @@ enum Cmd {
         #[arg(long, default_value = "operations", value_parser = ["operations", "faults", "trace"])]
         kind: String,
         /// Filter by UID.
-        #[arg(long)]
+        #[arg(long, add = ArgValueCandidates::new(completion::log_uids))]
         uid: Option<String>,
-        #[arg(long, default_value_t = 20)]
+        #[arg(long, default_value_t = LOG_LIMIT,
+              add = ArgValueCandidates::new(|| vec![LOG_LIMIT.to_string().into()]))]
         limit: usize,
     },
     /// All transaction spans of one operation.
-    Trace { trace_id: String },
+    Trace {
+        #[arg(add = ArgValueCandidates::new(completion::trace_ids))]
+        trace_id: String,
+    },
     /// Check USB, permissions, background process, devices and logs, with fixes.
     Doctor,
     /// Write a diagnostic report (one JSON file) to review and share with support.
@@ -156,7 +167,8 @@ enum Cmd {
     Mcp,
     /// Try the dashboard with simulated devices: separate home, no hardware touched.
     Demo {
-        #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=8))]
+        #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(DEMO_COUNTS),
+              add = ArgValueCandidates::new(|| DEMO_COUNTS.map(|count| count.to_string().into()).collect()))]
         count: u8,
         /// Print the one-time link instead of opening a browser.
         #[arg(long)]

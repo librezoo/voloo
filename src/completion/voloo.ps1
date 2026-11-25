@@ -12,7 +12,12 @@ Register-ArgumentCompleter -Native -CommandName voloo, voloo.cmd, voloo.ps1, vol
         }
     )
 
-    $prefix = ([string]$wordToComplete).TrimStart("'", '"')
+    $prefix = [string]$wordToComplete
+    # PowerShell may supply the closing quote even while a path is unfinished.
+    if ($prefix.StartsWith("'") -or $prefix.StartsWith('"')) {
+        $quote = [string]$prefix[0]
+        $prefix = $prefix.Trim([char]$quote).Replace($quote + $quote, $quote)
+    }
     # Pass the parsed words as data. Never evaluate text from the command line.
     # Native stdout is UTF-8, including on Windows PowerShell's legacy code pages.
     $encoding = [Console]::OutputEncoding
@@ -22,11 +27,17 @@ Register-ArgumentCompleter -Native -CommandName voloo, voloo.cmd, voloo.ps1, vol
     } finally {
         if ($encoding.CodePage -ne 65001) { [Console]::OutputEncoding = $encoding }
     }
+    if (!$candidates) { return '' }
     foreach ($value in $candidates) {
         $text = $value
         if ($text -match '[^\p{L}\p{N}_.=/:\\-]') {
             $text = "'" + $text.Replace("'", "''") + "'"
         }
-        [System.Management.Automation.CompletionResult]::new($text, $value, 'ParameterValue', $value)
+        $type = if ($value.EndsWith('/') -or $value.EndsWith([string][IO.Path]::DirectorySeparatorChar)) {
+            'ProviderContainer'
+        } else {
+            'ParameterValue'
+        }
+        [System.Management.Automation.CompletionResult]::new($text, $value, $type, $value)
     }
 }
