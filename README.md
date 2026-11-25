@@ -31,6 +31,7 @@ needed on macOS, Linux or Windows 10/11.
   <a href="docs/user-guide.en.md">User guide</a> ·
   <a href="docs/user-guide.md">中文使用说明</a> ·
   <a href="docs/reference.md">Reference</a> ·
+  <a href="#community">QQ 技术交流群</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
@@ -109,6 +110,12 @@ and OFF with valid measurements and VOUT ≤ 1 V. See
 | [Firmware updates](docs/firmware-updates.md) · [中文](docs/firmware-updates.zh.md) | Updating, rollback, recovery |
 | [Changelog](CHANGELOG.md) · [Release notes](docs/releases/) | What changed in each version |
 | [Security](SECURITY.md) | Reporting vulnerabilities |
+
+## Community
+
+[加入 voloo 技术交流 QQ 群](https://qm.qq.com/q/3dPDKPKEqc)，一起交流使用经验、提问和反馈问题。也可以用手机 QQ 扫描下方二维码。
+
+<a href="https://qm.qq.com/q/3dPDKPKEqc"><img src="https://raw.githubusercontent.com/librezoo/voloo/main/docs/assets/voloo-qq-group.png" alt="扫码加入 voloo 技术交流 QQ 群" width="320"></a>
 
 ## Development
 
