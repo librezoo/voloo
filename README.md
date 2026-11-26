@@ -62,8 +62,14 @@ If npm reports a permission error (EACCES), do not use `sudo`; see the
 
 ### Tab completion
 
-Run the line for your shell. To enable completion in new terminals, add the
-same line to your shell startup file.
+After installation, run `voloo` or `voloo ls` in an interactive terminal. Accept
+the one-time Tab completion prompt and open a new terminal. Voloo shows which
+files it will update before asking. The setup carries over when you update
+Voloo. To enable completion later, run `voloo completions install`, optionally
+followed by the shell name. Set `VOLOO_NO_COMPLETION_PROMPT=1` to skip the prompt.
+
+To load completion immediately in your current terminal, run the line for your
+shell. You can also add the line to the startup file yourself.
 
 | Shell | Enable in the current session | Startup file |
 | --- | --- | --- |

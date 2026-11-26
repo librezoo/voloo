@@ -1,6 +1,88 @@
 use std::{fs, process::Command};
 
 #[test]
+fn install_uses_shell_directories_and_preserves_profiles() {
+    let home = tempfile::tempdir().unwrap();
+    let zdot = home.path().join("zsh config");
+    let xdg = home.path().join("xdg config");
+    let cli = || {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_voloo"));
+        cmd.env("HOME", home.path())
+            .env("USERPROFILE", home.path())
+            .env("ZDOTDIR", &zdot)
+            .env("XDG_CONFIG_HOME", &xdg)
+            .env("VOLOO_HOME", home.path().join("voloo"))
+            .env_remove("VOLOO_LOG_LEVEL");
+        cmd
+    };
+    let install = |shell| {
+        let out = cli()
+            .args(["completions", "install", shell])
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+
+    let profile = home.path().join(".profile");
+    let old = b"# keep existing profile, with no trailing newline";
+    fs::write(&profile, old).unwrap();
+    install("bash");
+    let first = fs::read(&profile).unwrap();
+    assert!(first.starts_with(old));
+    assert!(!home.path().join(".bash_profile").exists());
+    assert!(
+        fs::read_to_string(home.path().join(".bashrc"))
+            .unwrap()
+            .contains("voloo completions bash")
+    );
+    install("bash");
+    assert_eq!(fs::read(&profile).unwrap(), first);
+
+    fs::create_dir(&zdot).unwrap();
+    let zshrc = zdot.join(".zshrc");
+    fs::write(&zshrc, "source <(voloo completions zsh)\n").unwrap();
+    install("zsh");
+    assert_eq!(
+        fs::read_to_string(&zshrc).unwrap(),
+        "source <(voloo completions zsh)\n"
+    );
+    fs::write(&zshrc, old).unwrap();
+    let children: Vec<_> = (0..4)
+        .map(|_| {
+            cli()
+                .args(["completions", "install", "zsh"])
+                .spawn()
+                .unwrap()
+        })
+        .collect();
+    for mut child in children {
+        assert!(child.wait().unwrap().success());
+    }
+    let zsh = fs::read_to_string(zshrc).unwrap();
+    assert!(zsh.as_bytes().starts_with(old));
+    assert_eq!(
+        zsh.matches("source <(command voloo completions zsh)")
+            .count(),
+        1
+    );
+
+    install("fish");
+    let fish = xdg.join("fish/completions/voloo.fish");
+    assert!(
+        fs::read_to_string(&fish)
+            .unwrap()
+            .contains("voloo completions fish")
+    );
+    fs::write(&fish, "# my own completion\n").unwrap();
+    install("fish");
+    assert_eq!(fs::read_to_string(fish).unwrap(), "# my own completion\n");
+}
+
+#[test]
 fn shell_setup_and_contextual_suggestions_work_offline() {
     let home = tempfile::tempdir().unwrap();
     let run = |args: &[&str]| {
@@ -45,6 +127,8 @@ fn shell_setup_and_contextual_suggestions_work_offline() {
     };
     assert_eq!(suggest("-h", &[]), "-h\n");
     assert_eq!(suggest("-V", &[]), "-V\n");
+    assert_eq!(suggest("in", &["completions"]), "install\n");
+    assert_eq!(suggest("fi", &["completions", "install"]), "fish\n");
     assert_eq!(suggest("COM", &["info", "--port"]), "COM4\n");
     assert_eq!(suggest("--port=COM", &[]), "--port=COM4\n");
     assert_eq!(suggest("", &["cycle", "bench-a", "--off-ms"]), "1000\n");

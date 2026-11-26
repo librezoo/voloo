@@ -11,13 +11,24 @@ use std::{
 };
 use voloo::{client::Client, config::Config, daemon, discover, home, observe, protocol::Uid};
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Shell {
     Bash,
     Zsh,
     Fish,
     #[value(name = "powershell", alias = "pwsh")]
     Pwsh,
+}
+
+impl Shell {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Bash => "bash",
+            Self::Zsh => "zsh",
+            Self::Fish => "fish",
+            Self::Pwsh => "powershell",
+        }
+    }
 }
 
 pub(crate) fn register(shell: Shell) -> ExitCode {
@@ -229,3 +240,4 @@ fn portable_name(name: &str) -> bool {
             .chars()
             .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.'))
 }
+pub(crate) mod setup;

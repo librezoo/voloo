@@ -1,7 +1,7 @@
 #![allow(clippy::result_large_err)] // see lib.rs
 mod completion;
 
-use clap::{Parser, Subcommand, ValueHint};
+use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::ArgValueCandidates;
 use serde_json::{Value, json};
 use std::{
@@ -187,8 +187,14 @@ enum Cmd {
         #[command(subcommand)]
         action: DaemonCmd,
     },
-    /// Print a shell script that enables Tab completion.
-    Completions { shell: completion::Shell },
+    /// Print or install shell Tab completion.
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+    Completions {
+        #[arg(required = true)]
+        shell: Option<completion::Shell>,
+        #[command(subcommand)]
+        action: Option<CompletionCmd>,
+    },
     #[command(name = "__complete", hide = true)]
     Complete {
         // The shell prefixes the current word with '=' so even an empty word
@@ -242,6 +248,12 @@ enum DaemonCmd {
     Stop,
 }
 
+#[derive(Subcommand)]
+enum CompletionCmd {
+    /// Enable completion for new terminals. Defaults to the current shell.
+    Install { shell: Option<completion::Shell> },
+}
+
 enum Backend {
     Direct {
         recorder: Arc<Recorder>,
@@ -256,6 +268,20 @@ struct Ctx {
 }
 
 fn main() -> ExitCode {
+    let mut args = std::env::args_os().skip(1);
+    let first = args.next();
+    if args.next().is_none()
+        && first.as_deref().is_none_or(|arg| arg == "ls")
+        && completion::setup::interactive()
+    {
+        completion::setup::offer();
+        if first.is_none() {
+            let _ = Cli::command().print_help();
+            println!();
+            return ExitCode::SUCCESS;
+        }
+    }
+
     // Usage errors exit 4 (invalid argument); 2 is reserved for device-reported failure.
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
@@ -269,7 +295,14 @@ fn main() -> ExitCode {
         }
     };
     match cli.command {
-        Cmd::Completions { shell } => return completion::register(shell),
+        Cmd::Completions {
+            action: Some(CompletionCmd::Install { shell }),
+            ..
+        } => return completion::setup::install(shell),
+        Cmd::Completions {
+            shell: Some(shell), ..
+        } => return completion::register(shell),
+        Cmd::Completions { .. } => unreachable!("clap requires a shell or a subcommand"),
         Cmd::Complete { words } => return completion::suggest(words),
         Cmd::Daemon {
             action: DaemonCmd::Run,

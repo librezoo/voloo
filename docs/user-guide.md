@@ -49,7 +49,9 @@ voloo demo
 
 ### 开启 Tab 补全
 
-在当前终端运行对应命令，或者把同一行加入 Shell 启动配置，以便新终端自动加载。
+安装 npm 包后，在交互终端运行 `voloo` 或 `voloo ls`。Voloo 会显示准备写入的文件，输入 `y` 确认后，新终端即可用 Tab 补全。更新 Voloo 时无需重新配置。跳过后可运行 `voloo completions install`，也可以指定 Shell，例如 `voloo completions install zsh`。设置 `VOLOO_NO_COMPLETION_PROMPT=1` 可禁用提示。
+
+想在当前窗口立即启用，可运行对应命令。
 
 | Shell | 启用命令 |
 | --- | --- |
