@@ -291,8 +291,10 @@ fn profile_text(bytes: &[u8]) -> String {
         return String::from_utf8_lossy(bytes).into_owned();
     };
     let units: Vec<_> = bytes[2..]
-        .chunks_exact(2)
-        .map(|pair| decode([pair[0], pair[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&pair| decode(pair))
         .collect();
     String::from_utf16_lossy(&units)
 }
