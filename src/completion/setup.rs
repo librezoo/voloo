@@ -5,7 +5,7 @@ use super::Shell;
 use std::{
     env,
     ffi::OsStr,
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{self, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     process::{Command, ExitCode},
@@ -259,7 +259,14 @@ impl Setup {
 
 fn read_startup(path: &Path) -> io::Result<Option<Vec<u8>>> {
     match fs::metadata(path) {
-        Ok(metadata) if metadata.is_file() => fs::read(path).map(Some),
+        Ok(metadata) if metadata.is_file() => {
+            let mut file = File::open(path)?;
+            // Windows enforces the writer's lock for other file handles.
+            file.lock_shared()?;
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)?;
+            Ok(Some(bytes))
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => match fs::symlink_metadata(path) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             _ => Err(io::Error::other(format!(
