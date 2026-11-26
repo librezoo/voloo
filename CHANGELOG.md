@@ -7,7 +7,7 @@ evidence are in [docs/releases](docs/releases/).
 
 ## Unreleased
 
-## 0.8.0 - 2026-11-26
+## 0.8.1 - 2026-11-26
 
 ### Added
 
