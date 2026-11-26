@@ -7,6 +7,18 @@ evidence are in [docs/releases](docs/releases/).
 
 ## Unreleased
 
+## 0.8.0 - 2026-11-26
+
+### Added
+
+- Tab completion for Bash, Zsh, Fish and PowerShell. Complete commands, options,
+  device nicknames and UIDs, local firmware paths, serial ports and recent trace IDs.
+- On first interactive use of `voloo` or `voloo ls`, accept a one-time prompt to
+  enable completion in new terminals. Use `voloo completions install` to enable
+  it later.
+- The CLI and dashboard advise checking the USB connection when it drops
+  repeatedly.
+
 ## 0.7.5 - 2026-11-17
 
 ### Fixed
