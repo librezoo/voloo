@@ -18,7 +18,7 @@ Three things to keep in mind:
 
 ## Tested operating range and overvoltage protection
 
-The nominal input range is **3.3–28 V DC**. Operation with a **3 A constant-current load** in this range has been tested. The **maximum recommended load current is 3 A; exceeding 3 A can damage the hardware.** This condition does not establish support for arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
+The nominal input range is **3.3–28 V DC**. Operation with a **3 A constant-current load** in this range has been tested. The **continuous current rating at thermal equilibrium is 3 A**. The onboard **5 A time-delay fuse** has a component rating; it does not specify the unit’s peak current limit. This condition does not establish support for arbitrary inrush, inductive backfeed, all-temperature or indefinite enclosed operation.
 
 Load power is `P = V × I`: 3.3/5/12/24/28 V at 3 A correspond to 9.9/15/36/72/84 W. The 84 W value describes the 28 V, 3 A operating point, not a voltage-independent power rating. voloo does not regulate voltage or provide programmable current/power limiting; set appropriate limits on the external supply.
 
@@ -36,7 +36,7 @@ These thresholds use software voltage measurements. They are not guaranteed phys
 
 - **Reversed supply polarity damages the hardware.** Verify + / − before wiring and turn the supply output off before connecting it.
 - **Do not power both the load supply and the USB host computer from the same adapter.** Use independent supply A for voloo IN / the load and another independent supply B for the operating computer. Different output ports on one multiport adapter do not count as independent supplies. Do not take load power from the host computer's USB port.
-- **3 A is the maximum recommended current. Higher current can damage the hardware.** This applies at every operating voltage: for example, 12 V × 4 A = 48 W still exceeds the current limit even though it is below 84 W. Set an appropriate external current limit no higher than 3 A; voloo does not actively limit current.
+- **Size the continuous load for 3 A at thermal equilibrium.** For example, a continuous 4 A load at 12 V exceeds the continuous rating even at 48 W. Set the external supply current limit for the load. Assess inrush separately using peak amplitude, pulse duration, repetition interval and cooling.
 
 ## Spring-terminal wiring and removal
 
@@ -55,7 +55,7 @@ The orange tabs release the wire clamps; **they do not switch power**. Use the d
 
 ![Release and gently tug to check the clamp](assets/terminal-step-3.svg)
 
-To remove a wire, disconnect all power first. Hold the matching orange tab and gently pull the wire straight out. Do not force the wire or pry the tab. The diagrams show how the clamp works; they do not specify which terminal is positive or negative. Follow physical IN / OUT and + / − markings: the illustrated leads use red for positive and black for negative. Component ratings do not change the system limits of **3.3–28 V DC and 3 A maximum recommended current**.
+To remove a wire, disconnect all power first. Hold the matching orange tab and gently pull the wire straight out. Do not force the wire or pry the tab. The diagrams show how the clamp works; they do not specify which terminal is positive or negative. Follow physical IN / OUT and + / − markings: the illustrated leads use red for positive and black for negative. Component ratings do not change the system limits of **3.3–28 V DC and 3 A continuous current at thermal equilibrium**.
 
 ## 1. Install
 

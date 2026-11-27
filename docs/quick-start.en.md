@@ -2,7 +2,7 @@
 
 [Two-page A4 PDF](assets/voloo-quick-start-en.pdf) · [Full English guide](user-guide.en.md) · [中文快速上手](quick-start.md) · [Website](https://voloo.librezoo.com/index.en.html)
 
-**3.3–28 V DC nominal; 3 A maximum recommended. Higher current can damage hardware. voloo does not regulate voltage or actively limit current: match the device voltage and set an external current limit.**
+**3.3–28 V DC nominal; 3 A continuous at thermal equilibrium. The onboard fuse is rated 5 A (time-delay); this is not a peak current rating for the unit. voloo does not regulate voltage or actively limit current: match the device voltage and set an external current limit.**
 
 ## Connect the supply, device and computer
 

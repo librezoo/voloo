@@ -7,7 +7,7 @@
 <section class="figure" id="wiring">
   <div class="heading"><small>FIG 02 · 接线顺序</small><h2>电源供电，USB 负责控制</h2></div>
   <div class="connection">
-    <div class="connect-row"><div class="n">1</div><div><h3>独立电源 A</h3><p>3.3–28 V，电流不超过 3 A</p></div><div class="arrow">→</div><div class="dest"><h3>IN / SOURCE</h3><p>关闭电源输出后再接线</p></div></div>
+    <div class="connect-row"><div class="n">1</div><div><h3>独立电源 A</h3><p>3.3–28 V，持续热平衡电流 3 A</p></div><div class="arrow">→</div><div class="dest"><h3>IN / SOURCE</h3><p>关闭电源输出后再接线</p></div></div>
     <div class="connect-row"><div class="n">2</div><div><h3>OUT / DUT</h3><p>核对 + / − 标记</p></div><div class="arrow">→</div><div class="dest"><h3>设备</h3><p>只从这里取电</p></div></div>
     <div class="connect-row"><div class="n">3</div><div><h3>电脑（电源 B）</h3><p>B 与 A 是不同的适配器</p></div><div class="arrow">→</div><div class="dest"><h3>voloo USB-C</h3><p>控制与通信，不给负载供电</p></div></div>
   </div>
@@ -17,11 +17,11 @@
   <div class="heading"><small>FIG 03 · 电压与负载</small><h2>标称范围与软件保护分开看</h2></div>
   <div class="range-grid">
     <div class="range-card tested"><p class="tag">标称直流工作电压</p><p class="value">3.3–28 V</p><p class="note">正常使用按此标称范围</p></div>
-    <div class="range-card recommended"><p class="tag">最高建议电流</p><p class="value">3 A</p><p class="note">超过此电流可能损坏硬件</p></div>
-    <div class="range-card untested"><p class="tag">28 V / 3 A 工作点</p><p class="value">≈ 84 W</p><p class="note">按 P = U × I 换算负载功率</p></div>
+    <div class="range-card recommended"><p class="tag">持续热平衡电流</p><p class="value">3 A</p><p class="note">按持续负载和散热选型</p></div>
+    <div class="range-card untested"><p class="tag">慢断保险丝额定电流</p><p class="value">5 A</p><p class="note">不代表整机瞬时电流上限</p></div>
     <div class="range-card trip"><p class="tag">软件过压保护触发</p><p class="value">VIN &gt; 30.5 V</p><p class="note">使用固件发布的有效测量值</p></div>
   </div>
   <div class="range-bottom">① VIN &gt; 30.5 V：自动关闭输出并锁定过压保护。<br>② VIN &lt; 30.0 V：自动解除过压锁定，输出仍关闭。<br>③ 用户重新长按“开启供电”或发送新的 ON 命令，才恢复供电。</div>
-  <p class="caption">过压保护自动解除，不等于自动重新供电；不需要额外的过压复位命令。最高建议电流为 3 A，请在外部电源上设置合适的限流。</p>
+  <p class="caption">过压保护自动解除，不等于自动重新供电；不需要额外的过压复位命令。持续热平衡电流为 3 A，请在外部电源上设置合适的限流。</p>
 </section>
 </body></html>
