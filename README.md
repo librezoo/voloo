@@ -15,8 +15,7 @@ Control the USB-C voloo Switch from a CLI, an AI agent (MCP), a local HTTP API o
 </p>
 
 <p align="center">
-  <img src="docs/assets/product-render.png" alt="The voloo Switch: yellow and purple enclosure, green spring terminals, USB-C port" width="420"><br>
-  <sub>AI-assisted product rendering</sub>
+  <img src="docs/assets/product-render.png" alt="Voloo Switch with purple polarity marks and arrows, green terminals and a front USB-C port" width="420">
 </p>
 
 One `voloo` program talks to every Switch over its own USB cable. No driver is

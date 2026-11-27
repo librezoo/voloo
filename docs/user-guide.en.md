@@ -32,6 +32,8 @@ These thresholds use software voltage measurements. They are not guaranteed phys
 
 ## Before connecting power
 
+![IN, OUT and USB-C connections](assets/port-map.en.png)
+
 - **Reversed supply polarity damages the hardware.** Verify + / − before wiring and turn the supply output off before connecting it.
 - **Do not power both the load supply and the USB host computer from the same adapter.** Use independent supply A for voloo IN / the load and another independent supply B for the operating computer. Different output ports on one multiport adapter do not count as independent supplies. Do not take load power from the host computer's USB port.
 - **3 A is the maximum recommended current. Higher current can damage the hardware.** This applies at every operating voltage: for example, 12 V × 4 A = 48 W still exceeds the current limit even though it is below 84 W. Set an appropriate external current limit no higher than 3 A; voloo does not actively limit current.
@@ -42,8 +44,8 @@ The orange tabs release the wire clamps; **they do not switch power**. Use the d
 
 **Do not handle the wires while either side is powered.** If residual voltage remains, keep USB connected and discharge until VOUT ≤ 1 V is confirmed. Then turn off and disconnect the external supply, unplug USB-C, and confirm that neither the input nor the device side has power.
 
-1. **Strip 11 mm** of insulation from the wire, if needed, as specified in the [KEFA KF142V-5.08 drawing (LCSC C475134)](https://www.lcsc.com/datasheet/C475134.pdf). Keep the strands together. Check that any pre-fitted wire end fits the terminal.
-2. **Press and hold** the matching orange tab **toward the circuit board** to open the clamp.
+1. **Strip 5–11 mm** of insulation from the wire, if needed. Keep the strands together. Check that any pre-fitted wire end fits the terminal.
+2. **Press and hold** the matching orange tab **toward the circuit board** to open the clamp. If you wear nail extensions, press carefully with the pad of your finger.
 3. **Keep pressing and insert** the conductor fully into the adjacent **round wire opening in the green terminal**. Orange openings and narrow green slots are not wire entries.
 4. **Release, then gently tug** to check the grip. Check that no bare copper is exposed outside the terminal.
 

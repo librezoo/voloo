@@ -10,16 +10,16 @@
 2. **OUT / DUT → device**. The device must take power only from OUT. Disconnect its other USB, battery and debugger power.
 3. **Computer → USB-C**, using a data cable. Power the computer from independent **supply B**. Different ports on one multiport adapter do not count as independent supplies.
 
-![Product rendering with red positive and black negative wires](assets/product-render.png)
+![IN connects to the supply, OUT to the device, and USB-C to the computer](assets/port-map.en.png)
 
-Use wire colors as a guide, but always check the markings on your unit and measure the actual polarity. Product appearance is an AI-assisted rendering.
+Use wire colors as a guide, but always check the markings on your unit and measure the actual polarity.
 
 ## Connect the wires
 
 The orange tabs release the wire clamps; **they do not switch power**. Do not handle wires while either side is powered. If residual voltage remains, keep USB connected and discharge until VOUT ≤ 1 V is confirmed, then turn off and disconnect the external supply, unplug USB-C, and verify both ends are unpowered.
 
-1. Strip **11 mm** of insulation, if needed, as specified in the [manufacturer drawing](https://www.lcsc.com/datasheet/C475134.pdf). Keep the strands together. Check that any pre-fitted wire end fits the terminal.
-2. Hold the matching orange tab **toward the circuit board**.
+1. Strip **5–11 mm** of insulation, if needed. Keep the strands together. Check that any pre-fitted wire end fits the terminal.
+2. Hold the matching orange tab **toward the circuit board**. If you wear nail extensions, press carefully with the pad of your finger.
 3. Keep pressing and fully insert the conductor into the adjacent **round wire opening in the green terminal**.
 4. Release, then gently tug to check the grip. Check that no bare copper is exposed.
 
